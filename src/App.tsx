@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Calendar, Clock, QrCode, Bell, User, X, CheckCircle2, ArrowRight, Plus, Ticket, History } from 'lucide-react';
+import bcrypt from 'bcryptjs';
 
 const Background = () => (
   <div className="fixed inset-0 z-[-1] overflow-hidden bg-[#0a0a1a]">
@@ -146,23 +147,60 @@ const Features = () => {
 };
 
 const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'signup', onClose: () => void, onSwitch: () => void, onSuccess: () => void }) => {
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
     
-    if (type === 'login') {
-      if (email === 'admin@qsync.com' && password === '54321') {
-        onSuccess();
+    try {
+      if (type === 'signup') {
+        // Hash the password on the frontend as requested
+        const salt = bcrypt.genSaltSync(10);
+        const passwordHash = bcrypt.hashSync(password, salt);
+        
+        const res = await fetch('/api/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fullName, email, passwordHash })
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          onSuccess();
+        } else {
+          setError(data.message || 'Signup failed');
+        }
       } else {
-        setError('Invalid credentials. Use admin@qsync.com / 54321');
+        // Login
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          // Compare the password with the hash from the database
+          const isValid = bcrypt.compareSync(password, data.passwordHash);
+          if (isValid) {
+            onSuccess();
+          } else {
+            setError('Invalid credentials');
+          }
+        } else {
+          setError(data.message || 'Invalid credentials');
+        }
       }
-    } else {
-      // For signup, just succeed for demo purposes
-      onSuccess();
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -196,12 +234,12 @@ const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'si
           {type === 'signup' && (
             <div className="space-y-1">
               <label className="text-sm font-medium text-white/80 ml-1">Full Name</label>
-              <input type="text" className="w-full glass-input rounded-xl px-4 py-3 text-sm" placeholder="John Doe" required />
+              <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" placeholder="John Doe" required />
             </div>
           )}
           <div className="space-y-1">
             <label className="text-sm font-medium text-white/80 ml-1">Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" placeholder="admin@qsync.com" required />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" placeholder="you@example.com" required />
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium text-white/80 ml-1">Password</label>
@@ -210,8 +248,8 @@ const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'si
           
           {error && <p className="text-red-400 text-sm text-center mt-2">{error}</p>}
           
-          <button className="w-full py-3 rounded-xl bg-white text-black font-semibold mt-6 hover:bg-white/90 transition-colors">
-            {type === 'login' ? 'Log In' : 'Sign Up'}
+          <button disabled={isLoading} className="w-full py-3 rounded-xl bg-white text-black font-semibold mt-6 hover:bg-white/90 transition-colors disabled:opacity-50">
+            {isLoading ? 'Please wait...' : (type === 'login' ? 'Log In' : 'Sign Up')}
           </button>
         </form>
 
