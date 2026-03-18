@@ -75,6 +75,58 @@ async function startServer() {
     }
   });
 
+  // Ensure tickets table has the required columns for the frontend
+  const ensureTicketColumns = async () => {
+    try {
+      await pool.query('ALTER TABLE tickets ADD COLUMN appointment_date DATE');
+    } catch (e) { /* Ignore if exists */ }
+    try {
+      await pool.query('ALTER TABLE tickets ADD COLUMN time_period VARCHAR(50)');
+    } catch (e) { /* Ignore if exists */ }
+  };
+  ensureTicketColumns();
+
+  app.post('/api/tickets', async (req, res) => {
+    try {
+      const { userId, service, date, time } = req.body;
+      
+      // Map frontend services to queue IDs (assuming 1, 2, 3 exist from schema.sql)
+      let queueId = 1;
+      if (service === 'specialist') queueId = 2;
+      if (service === 'renewal') queueId = 3;
+
+      const ticketNumber = `TKT-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const [result] = await pool.query(
+        'INSERT INTO tickets (queue_id, user_id, ticket_number, appointment_date, time_period) VALUES (?, ?, ?, ?, ?)',
+        [queueId, userId, ticketNumber, date, time]
+      );
+
+      res.json({ success: true, ticketId: (result as any).insertId, ticketNumber });
+    } catch (error) {
+      console.error('Booking error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+  app.get('/api/tickets/:userId', async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const [rows] = await pool.query(`
+        SELECT t.*, q.name as queue_name 
+        FROM tickets t 
+        JOIN queues q ON t.queue_id = q.id 
+        WHERE t.user_id = ? 
+        ORDER BY t.joined_at DESC
+      `, [userId]);
+      
+      res.json({ success: true, tickets: rows });
+    } catch (error) {
+      console.error('Fetch tickets error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

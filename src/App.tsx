@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Calendar, Clock, QrCode, Bell, User, X, CheckCircle2, ArrowRight, Plus, Ticket, History } from 'lucide-react';
 import bcrypt from 'bcryptjs';
@@ -146,7 +146,7 @@ const Features = () => {
   );
 };
 
-const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'signup', onClose: () => void, onSwitch: () => void, onSuccess: (email: string) => void }) => {
+const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'signup', onClose: () => void, onSwitch: () => void, onSuccess: (user: { id: number, email: string }) => void }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -172,7 +172,7 @@ const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'si
         
         const data = await res.json();
         if (data.success) {
-          onSuccess(email);
+          onSuccess({ id: data.userId, email });
         } else {
           setError(data.message || 'Signup failed');
         }
@@ -189,7 +189,7 @@ const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'si
           // Compare the password with the hash from the database
           const isValid = bcrypt.compareSync(password, data.passwordHash);
           if (isValid) {
-            onSuccess(email);
+            onSuccess({ id: data.user.id, email: data.user.email });
           } else {
             setError('Invalid credentials');
           }
@@ -264,9 +264,49 @@ const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'si
   );
 };
 
-const Dashboard = () => {
+const Dashboard = ({ userId }: { userId?: number }) => {
   const [activeTab, setActiveTab] = useState('new');
   const [booked, setBooked] = useState(false);
+  const [service, setService] = useState('');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [tickets, setTickets] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (userId && (activeTab === 'queue' || activeTab === 'history')) {
+      fetch(`/api/tickets/${userId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setTickets(data.tickets);
+          }
+        })
+        .catch(err => console.error('Failed to fetch tickets', err));
+    }
+  }, [userId, activeTab]);
+
+  const handleBooking = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId) return;
+    
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, service, date, time })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBooked(true);
+      }
+    } catch (error) {
+      console.error('Booking failed', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <motion.div 
@@ -303,10 +343,10 @@ const Dashboard = () => {
                   <button onClick={() => setActiveTab('queue')} className="glass-button px-6 py-2 rounded-xl">View My Queue</button>
                 </div>
               ) : (
-                <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); setBooked(true); }}>
+                <form className="space-y-6" onSubmit={handleBooking}>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-white/80">Select Service</label>
-                    <select className="w-full glass-input rounded-xl px-4 py-3 text-sm appearance-none" required>
+                    <select value={service} onChange={e => setService(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm appearance-none" required>
                       <option value="" className="bg-gray-900">Choose a service...</option>
                       <option value="consultation" className="bg-gray-900">General Consultation</option>
                       <option value="specialist" className="bg-gray-900">Specialist Visit</option>
@@ -315,27 +355,27 @@ const Dashboard = () => {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-white/80">Select Date</label>
-                    <input type="date" className="w-full glass-input rounded-xl px-4 py-3 text-sm [color-scheme:dark]" required />
+                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm [color-scheme:dark]" required />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-white/80">Time Period</label>
                     <div className="grid grid-cols-2 gap-4">
                       <label className="cursor-pointer">
-                        <input type="radio" name="time" className="peer sr-only" required />
+                        <input type="radio" name="time" value="Morning" checked={time === 'Morning'} onChange={e => setTime(e.target.value)} className="peer sr-only" required />
                         <div className="text-center px-4 py-3 rounded-xl border border-white/10 peer-checked:bg-indigo-500/20 peer-checked:border-indigo-500/50 hover:bg-white/5 transition-all">
                           Morning (9 AM - 12 PM)
                         </div>
                       </label>
                       <label className="cursor-pointer">
-                        <input type="radio" name="time" className="peer sr-only" required />
+                        <input type="radio" name="time" value="Evening" checked={time === 'Evening'} onChange={e => setTime(e.target.value)} className="peer sr-only" required />
                         <div className="text-center px-4 py-3 rounded-xl border border-white/10 peer-checked:bg-indigo-500/20 peer-checked:border-indigo-500/50 hover:bg-white/5 transition-all">
                           Evening (2 PM - 6 PM)
                         </div>
                       </label>
                     </div>
                   </div>
-                  <button type="submit" className="w-full py-4 rounded-xl bg-white text-black font-semibold mt-4 hover:bg-white/90 transition-colors">
-                    Confirm Booking
+                  <button type="submit" disabled={isLoading} className="w-full py-4 rounded-xl bg-white text-black font-semibold mt-4 hover:bg-white/90 transition-colors disabled:opacity-50">
+                    {isLoading ? 'Processing...' : 'Confirm Booking'}
                   </button>
                 </form>
               )}
@@ -345,46 +385,52 @@ const Dashboard = () => {
           {activeTab === 'queue' && (
             <div className="glass-panel rounded-3xl p-8">
               <h2 className="text-2xl font-bold mb-6">Your Active Queue</h2>
-              <div className="flex flex-col md:flex-row gap-8 items-center md:items-start">
-                <div className="flex-1 space-y-6 w-full">
-                  <div className="glass-panel rounded-2xl p-6 border-indigo-500/30 bg-indigo-500/5">
-                    <div className="text-indigo-400 text-sm font-medium mb-1">Current Status</div>
-                    <div className="text-3xl font-bold mb-2">You are #5 in queue</div>
-                    <p className="text-white/70 text-sm">Approximate waiting time: 45 minutes</p>
+              {tickets.filter(t => t.status === 'waiting' || t.status === 'serving').length === 0 ? (
+                <div className="text-center py-10 text-white/60">No active tickets in your queue.</div>
+              ) : (
+                tickets.filter(t => t.status === 'waiting' || t.status === 'serving').map(ticket => (
+                  <div key={ticket.id} className="flex flex-col md:flex-row gap-8 items-center md:items-start mb-8">
+                    <div className="flex-1 space-y-6 w-full">
+                      <div className="glass-panel rounded-2xl p-6 border-indigo-500/30 bg-indigo-500/5">
+                        <div className="text-indigo-400 text-sm font-medium mb-1">Current Status</div>
+                        <div className="text-3xl font-bold mb-2">Status: {ticket.status}</div>
+                        <p className="text-white/70 text-sm">Ticket Number: {ticket.ticket_number}</p>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center border-b border-white/10 pb-4">
+                          <span className="text-white/60">Service</span>
+                          <span className="font-medium">{ticket.queue_name}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-b border-white/10 pb-4">
+                          <span className="text-white/60">Date</span>
+                          <span className="font-medium">{ticket.appointment_date ? new Date(ticket.appointment_date).toLocaleDateString() : 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-b border-white/10 pb-4">
+                          <span className="text-white/60">Time Period</span>
+                          <span className="font-medium">{ticket.time_period || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-white/60">Queue Number</span>
+                          <span className="font-bold text-xl text-fuchsia-400">{ticket.ticket_number}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="w-full md:w-64 flex flex-col items-center justify-center p-6 glass-panel rounded-2xl bg-white/5">
+                      <div className="w-48 h-48 bg-white rounded-xl p-2 mb-4">
+                        <div className="w-full h-full border-4 border-black flex items-center justify-center relative">
+                          <div className="absolute top-2 left-2 w-8 h-8 border-4 border-black"></div>
+                          <div className="absolute top-2 right-2 w-8 h-8 border-4 border-black"></div>
+                          <div className="absolute bottom-2 left-2 w-8 h-8 border-4 border-black"></div>
+                          <QrCode className="w-16 h-16 text-black" />
+                        </div>
+                      </div>
+                      <p className="text-sm text-center text-white/60">Scan at the location to confirm arrival</p>
+                    </div>
                   </div>
-                  
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center border-b border-white/10 pb-4">
-                      <span className="text-white/60">Service</span>
-                      <span className="font-medium">General Consultation</span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-white/10 pb-4">
-                      <span className="text-white/60">Date</span>
-                      <span className="font-medium">Oct 24, 2026</span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-white/10 pb-4">
-                      <span className="text-white/60">Time Period</span>
-                      <span className="font-medium">Morning</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-white/60">Queue Number</span>
-                      <span className="font-bold text-xl text-fuchsia-400">#42</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="w-full md:w-64 flex flex-col items-center justify-center p-6 glass-panel rounded-2xl bg-white/5">
-                  <div className="w-48 h-48 bg-white rounded-xl p-2 mb-4">
-                    <div className="w-full h-full border-4 border-black flex items-center justify-center relative">
-                      <div className="absolute top-2 left-2 w-8 h-8 border-4 border-black"></div>
-                      <div className="absolute top-2 right-2 w-8 h-8 border-4 border-black"></div>
-                      <div className="absolute bottom-2 left-2 w-8 h-8 border-4 border-black"></div>
-                      <QrCode className="w-16 h-16 text-black" />
-                    </div>
-                  </div>
-                  <p className="text-sm text-center text-white/60">Scan at the location to confirm arrival</p>
-                </div>
-              </div>
+                ))
+              )}
             </div>
           )}
 
@@ -392,17 +438,21 @@ const Dashboard = () => {
             <div className="glass-panel rounded-3xl p-8">
               <h2 className="text-2xl font-bold mb-6">Appointment History</h2>
               <div className="space-y-4">
-                {[1, 2, 3].map((item) => (
-                  <div key={item} className="glass-panel rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-white/5 transition-colors">
-                    <div>
-                      <h4 className="font-semibold text-lg">Specialist Visit</h4>
-                      <p className="text-sm text-white/60">Sept 12, 2026 • Morning</p>
+                {tickets.filter(t => t.status === 'completed' || t.status === 'cancelled').length === 0 ? (
+                  <div className="text-center py-10 text-white/60">No history found.</div>
+                ) : (
+                  tickets.filter(t => t.status === 'completed' || t.status === 'cancelled').map((ticket) => (
+                    <div key={ticket.id} className="glass-panel rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-white/5 transition-colors">
+                      <div>
+                        <h4 className="font-semibold text-lg">{ticket.queue_name}</h4>
+                        <p className="text-sm text-white/60">{ticket.appointment_date ? new Date(ticket.appointment_date).toLocaleDateString() : 'N/A'} • {ticket.time_period || 'N/A'}</p>
+                      </div>
+                      <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${ticket.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                        <CheckCircle2 className="w-4 h-4" /> {ticket.status.charAt(0).toUpperCase() + ticket.status.slice(1)}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-sm font-medium">
-                      <CheckCircle2 className="w-4 h-4" /> Completed
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -417,11 +467,13 @@ export default function App() {
   const [isSignupOpen, setIsSignupOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userEmail, setUserEmail] = useState<string | undefined>();
+  const [userId, setUserId] = useState<number | undefined>();
   const [currentView, setCurrentView] = useState<'home' | 'dashboard'>('home');
 
-  const handleAuthSuccess = (email: string) => {
+  const handleAuthSuccess = (user: { id: number, email: string }) => {
     setIsLoggedIn(true);
-    setUserEmail(email);
+    setUserEmail(user.email);
+    setUserId(user.id);
     setIsLoginOpen(false);
     setIsSignupOpen(false);
     setCurrentView('dashboard');
@@ -430,6 +482,7 @@ export default function App() {
   const handleLogout = () => {
     setIsLoggedIn(false);
     setUserEmail(undefined);
+    setUserId(undefined);
     setCurrentView('home');
   };
 
@@ -460,7 +513,7 @@ export default function App() {
             <Features />
           </>
         ) : (
-          <Dashboard />
+          <Dashboard userId={userId} />
         )}
       </main>
 
