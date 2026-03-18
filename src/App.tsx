@@ -17,7 +17,7 @@ const Background = () => (
   </div>
 );
 
-const Navbar = ({ onAuth, isLoggedIn, onLogout, currentView, onViewChange }: { onAuth: () => void, isLoggedIn: boolean, onLogout: () => void, currentView: string, onViewChange: (view: string) => void }) => (
+const Navbar = ({ onAuth, isLoggedIn, userEmail, onLogout, currentView, onViewChange }: { onAuth: () => void, isLoggedIn: boolean, userEmail?: string, onLogout: () => void, currentView: string, onViewChange: (view: string) => void }) => (
   <motion.nav 
     initial={{ y: -20, opacity: 0 }}
     animate={{ y: 0, opacity: 1 }}
@@ -45,7 +45,7 @@ const Navbar = ({ onAuth, isLoggedIn, onLogout, currentView, onViewChange }: { o
                 <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center border border-white/20">
                   <User className="w-4 h-4 text-white" />
                 </div>
-                <span className="text-sm font-medium hidden md:block">user@example.com</span>
+                <span className="text-sm font-medium hidden md:block">{userEmail || 'user@example.com'}</span>
               </div>
               <button onClick={onLogout} className="text-sm text-white/60 hover:text-white transition-colors">
                 Log out
@@ -146,7 +146,7 @@ const Features = () => {
   );
 };
 
-const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'signup', onClose: () => void, onSwitch: () => void, onSuccess: () => void }) => {
+const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'signup', onClose: () => void, onSwitch: () => void, onSuccess: (email: string) => void }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -172,7 +172,7 @@ const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'si
         
         const data = await res.json();
         if (data.success) {
-          onSuccess();
+          onSuccess(email);
         } else {
           setError(data.message || 'Signup failed');
         }
@@ -189,7 +189,7 @@ const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'si
           // Compare the password with the hash from the database
           const isValid = bcrypt.compareSync(password, data.passwordHash);
           if (isValid) {
-            onSuccess();
+            onSuccess(email);
           } else {
             setError('Invalid credentials');
           }
@@ -416,10 +416,12 @@ export default function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isSignupOpen, setIsSignupOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | undefined>();
   const [currentView, setCurrentView] = useState<'home' | 'dashboard'>('home');
 
-  const handleAuthSuccess = () => {
+  const handleAuthSuccess = (email: string) => {
     setIsLoggedIn(true);
+    setUserEmail(email);
     setIsLoginOpen(false);
     setIsSignupOpen(false);
     setCurrentView('dashboard');
@@ -427,6 +429,7 @@ export default function App() {
 
   const handleLogout = () => {
     setIsLoggedIn(false);
+    setUserEmail(undefined);
     setCurrentView('home');
   };
 
@@ -444,6 +447,7 @@ export default function App() {
       <Navbar 
         onAuth={() => setIsLoginOpen(true)} 
         isLoggedIn={isLoggedIn} 
+        userEmail={userEmail}
         onLogout={handleLogout}
         currentView={currentView}
         onViewChange={(view) => setCurrentView(view as 'home' | 'dashboard')}
