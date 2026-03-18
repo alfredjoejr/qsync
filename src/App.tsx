@@ -34,7 +34,7 @@ const Navbar = ({ onAuth, isLoggedIn, userEmail, onLogout, currentView, onViewCh
         
         <div className="hidden md:flex items-center gap-8 text-sm font-medium text-white/80">
           {isLoggedIn && (
-            <button onClick={() => onViewChange('dashboard')} className={`hover:text-white transition-colors ${currentView === 'dashboard' ? 'text-white font-semibold' : ''}`}>Dashboard</button>
+            <button onClick={() => onViewChange('dashboard')} className={`hover:text-white transition-colors ${currentView === 'dashboard' ? 'text-white font-semibold' : ''}`}></button>
           )}
         </div>
 
@@ -160,7 +160,6 @@ const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'si
     
     try {
       if (type === 'signup') {
-        // Hash the password on the frontend as requested
         const salt = bcrypt.genSaltSync(10);
         const passwordHash = bcrypt.hashSync(password, salt);
         
@@ -177,7 +176,6 @@ const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'si
           setError(data.message || 'Signup failed');
         }
       } else {
-        // Login
         const res = await fetch('/api/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -186,7 +184,6 @@ const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'si
         
         const data = await res.json();
         if (data.success) {
-          // Compare the password with the hash from the database
           const isValid = bcrypt.compareSync(password, data.passwordHash);
           if (isValid) {
             onSuccess({ id: data.user.id, email: data.user.email });
@@ -272,6 +269,21 @@ const Dashboard = ({ userId }: { userId?: number }) => {
   const [time, setTime] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [tickets, setTickets] = useState<any[]>([]);
+  const [queues, setQueues] = useState<any[]>([]);
+  
+  // New state for the custom cancel modal
+  const [cancelTicketId, setCancelTicketId] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch('/api/queues')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setQueues(data.queues);
+        }
+      })
+      .catch(err => console.error('Failed to fetch queues', err));
+  }, []);
 
   useEffect(() => {
     if (userId && (activeTab === 'queue' || activeTab === 'history')) {
@@ -308,6 +320,34 @@ const Dashboard = ({ userId }: { userId?: number }) => {
     }
   };
 
+  // Function to execute the actual cancellation after confirmation
+  const executeCancelTicket = async () => {
+    if (!userId || !cancelTicketId) return;
+    
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/tickets/${cancelTicketId}/cancel`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        const refreshRes = await fetch(`/api/tickets/${userId}`);
+        const refreshData = await refreshRes.json();
+        if (refreshData.success) {
+          setTickets(refreshData.tickets);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to cancel ticket', error);
+    } finally {
+      setCancelTicketId(null);
+      setIsLoading(false);
+    }
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -329,7 +369,7 @@ const Dashboard = ({ userId }: { userId?: number }) => {
         </div>
 
         {/* Content */}
-        <div className="flex-1">
+        <div className="flex-1 relative">
           {activeTab === 'new' && (
             <div className="glass-panel rounded-3xl p-8">
               <h2 className="text-2xl font-bold mb-6">Book New Appointment</h2>
@@ -340,7 +380,7 @@ const Dashboard = ({ userId }: { userId?: number }) => {
                   </div>
                   <h3 className="text-xl font-semibold mb-2">Appointment Confirmed!</h3>
                   <p className="text-white/60 mb-6">You have been added to the queue.</p>
-                  <button onClick={() => setActiveTab('queue')} className="glass-button px-6 py-2 rounded-xl">View My Queue</button>
+                  <button onClick={() => { setBooked(false); setActiveTab('queue'); }} className="glass-button px-6 py-2 rounded-xl">View My Queue</button>
                 </div>
               ) : (
                 <form className="space-y-6" onSubmit={handleBooking}>
@@ -348,9 +388,11 @@ const Dashboard = ({ userId }: { userId?: number }) => {
                     <label className="text-sm font-medium text-white/80">Select Service</label>
                     <select value={service} onChange={e => setService(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm appearance-none" required>
                       <option value="" className="bg-gray-900">Choose a service...</option>
-                      <option value="consultation" className="bg-gray-900">General Consultation</option>
-                      <option value="specialist" className="bg-gray-900">Specialist Visit</option>
-                      <option value="renewal" className="bg-gray-900">Document Renewal</option>
+                      {queues.map((queue) => (
+                        <option key={queue.id} value={queue.id} className="bg-gray-900">
+                          {queue.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -426,7 +468,14 @@ const Dashboard = ({ userId }: { userId?: number }) => {
                           <QrCode className="w-16 h-16 text-black" />
                         </div>
                       </div>
-                      <p className="text-sm text-center text-white/60">Scan at the location to confirm arrival</p>
+                      <p className="text-sm text-center text-white/60 mb-4">Scan at the location to confirm arrival</p>
+                      
+                      <button 
+                        onClick={() => setCancelTicketId(ticket.id)}
+                        className="w-full py-2 px-4 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50 transition-all text-sm font-medium flex items-center justify-center gap-2"
+                      >
+                        <X className="w-4 h-4" /> Cancel Appointment
+                      </button>
                     </div>
                   </div>
                 ))
@@ -456,6 +505,50 @@ const Dashboard = ({ userId }: { userId?: number }) => {
               </div>
             </div>
           )}
+
+          {/* Custom Cancel Confirmation Modal */}
+          <AnimatePresence>
+            {cancelTicketId !== null && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setCancelTicketId(null)}
+                  className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                />
+                <motion.div 
+                  initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                  className="glass-panel w-full max-w-sm rounded-3xl p-8 relative z-10 border-t border-l border-white/20 shadow-2xl text-center"
+                >
+                  <div className="w-16 h-16 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <X className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-2xl font-bold mb-2">Cancel Appointment?</h3>
+                  <p className="text-white/60 mb-8 text-sm leading-relaxed">
+                    Are you sure you want to cancel this appointment? This action cannot be undone.
+                  </p>
+                  <div className="flex gap-4">
+                    <button 
+                      onClick={() => setCancelTicketId(null)}
+                      className="flex-1 py-3 rounded-xl border border-white/10 hover:bg-white/10 text-white transition-colors font-medium text-sm"
+                    >
+                      Keep It
+                    </button>
+                    <button 
+                      onClick={executeCancelTicket}
+                      disabled={isLoading}
+                      className="flex-1 py-3 rounded-xl bg-red-500/80 hover:bg-red-500 text-white transition-colors font-medium text-sm disabled:opacity-50"
+                    >
+                      {isLoading ? 'Canceling...' : 'Yes, Cancel'}
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </motion.div>

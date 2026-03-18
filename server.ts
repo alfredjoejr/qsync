@@ -26,6 +26,17 @@ async function startServer() {
   app.use(express.json());
 
   // API routes FIRST
+  // Fetch available queues for the dropdown
+  app.get('/api/queues', async (req, res) => {
+    try {
+      const [rows] = await pool.query('SELECT id, name, description FROM queues WHERE is_active = TRUE');
+      res.json({ success: true, queues: rows });
+    } catch (error) {
+      console.error('Fetch queues error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
   app.get('/api/health', async (req, res) => {
     try {
       const [rows] = await pool.query('SELECT 1 AS solution');
@@ -87,27 +98,26 @@ async function startServer() {
   ensureTicketColumns();
 
   app.post('/api/tickets', async (req, res) => {
-    try {
-      const { userId, service, date, time } = req.body;
-      
-      // Map frontend services to queue IDs (assuming 1, 2, 3 exist from schema.sql)
-      let queueId = 1;
-      if (service === 'specialist') queueId = 2;
-      if (service === 'renewal') queueId = 3;
+      try {
+        const { userId, service, date, time } = req.body;
+        
+        // 'service' is now coming from the frontend as the actual queue ID (1, 2, or 3)
+        // We parse it into an integer just to be safe before inserting it into the database.
+        const queueId = parseInt(service, 10);
 
-      const ticketNumber = `TKT-${Math.floor(1000 + Math.random() * 9000)}`;
+        const ticketNumber = `TKT-${Math.floor(1000 + Math.random() * 9000)}`;
 
-      const [result] = await pool.query(
-        'INSERT INTO tickets (queue_id, user_id, ticket_number, appointment_date, time_period) VALUES (?, ?, ?, ?, ?)',
-        [queueId, userId, ticketNumber, date, time]
-      );
+        const [result] = await pool.query(
+          'INSERT INTO tickets (queue_id, user_id, ticket_number, appointment_date, time_period) VALUES (?, ?, ?, ?, ?)',
+          [queueId, userId, ticketNumber, date, time]
+        );
 
-      res.json({ success: true, ticketId: (result as any).insertId, ticketNumber });
-    } catch (error) {
-      console.error('Booking error:', error);
-      res.status(500).json({ success: false, message: 'Database error' });
-    }
-  });
+        res.json({ success: true, ticketId: (result as any).insertId, ticketNumber });
+      } catch (error) {
+        console.error('Booking error:', error);
+        res.status(500).json({ success: false, message: 'Database error' });
+      }
+    });
 
   app.get('/api/tickets/:userId', async (req, res) => {
     try {
@@ -126,7 +136,28 @@ async function startServer() {
       res.status(500).json({ success: false, message: 'Database error' });
     }
   });
+// Cancel a ticket
+  app.put('/api/tickets/:id/cancel', async (req, res) => {
+    try {
+      const ticketId = req.params.id;
+      const { userId } = req.body; // Verify user ID for basic security
+      
+      const [result] = await pool.query(
+        'UPDATE tickets SET status = "cancelled" WHERE id = ? AND user_id = ?',
+        [ticketId, userId]
+      );
+      
+      if ((result as any).affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Ticket not found or unauthorized' });
+      }
 
+      res.json({ success: true, message: 'Ticket cancelled' });
+    } catch (error) {
+      console.error('Cancel error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+  
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
