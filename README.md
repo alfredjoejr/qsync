@@ -17,3 +17,5 @@ This contains everything you need to run your app locally.
    `npm run dev`
 
 3. All database information must be fed in .env.example
+
+4. Please run the scheme in scheme.sql before testing the backend.
