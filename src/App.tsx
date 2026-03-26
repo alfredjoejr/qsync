@@ -373,9 +373,17 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
   const [editTicketData, setEditTicketData] = useState<any>(null);
 
   useEffect(() => {
+    // When on a specific tab, fetch only what is needed for that tab
     if (activeTab === 'users') fetchUsers();
     if (activeTab === 'tickets') fetchTickets();
-    if (activeTab === 'queues' || activeTab === 'overview') fetchAdminQueues();
+    if (activeTab === 'queues') fetchAdminQueues();
+    
+    // When on the overview tab, fetch EVERYTHING so the stats are accurate immediately
+    if (activeTab === 'overview') {
+      fetchAdminQueues();
+      fetchUsers();
+      fetchTickets();
+    }
   }, [activeTab]);
 
   const fetchUsers = async () => {
@@ -545,8 +553,7 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
 
           {/* Main Content Area */}
           <div className="flex-1 glass-panel p-8 rounded-3xl min-h-[500px] overflow-hidden">
-            
-            {activeTab === 'overview' && (
+                       {activeTab === 'overview' && (
               <div>
                 <h2 className="text-2xl font-bold mb-6">System Overview</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -561,7 +568,72 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
                 </div>
               </div>
             )}
+ 
+            {activeTab === 'overview' && (
+              <div className="flex flex-col h-full min-h-[450px]">
+                <h2 className="text-2xl font-bold mb-6">System Overview</h2>
+                
+                {/* Top Stat Cards Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                  <div className="p-5 rounded-2xl bg-white/5 border border-white/10 flex flex-col justify-between hover:bg-white/10 transition-colors">
+                     <div className="text-white/50 text-sm mb-2 flex items-center gap-2"><Layers className="w-4 h-4 text-indigo-400"/> Total Queues</div>
+                     <div className="text-3xl font-bold">{queuesList.length}</div>
+                  </div>
+                  <div className="p-5 rounded-2xl bg-white/5 border border-white/10 flex flex-col justify-between hover:bg-white/10 transition-colors">
+                     <div className="text-white/50 text-sm mb-2 flex items-center gap-2"><Users className="w-4 h-4 text-fuchsia-400"/> Total Users</div>
+                     <div className="text-3xl font-bold">{usersList.length}</div>
+                  </div>
+                  <div className="p-5 rounded-2xl bg-white/5 border border-white/10 flex flex-col justify-between hover:bg-white/10 transition-colors">
+                     <div className="text-white/50 text-sm mb-2 flex items-center gap-2"><QrCode className="w-4 h-4 text-rose-400"/> Total Tickets</div>
+                     <div className="text-3xl font-bold">{ticketsList.length}</div>
+                  </div>
+                  <div className="p-5 rounded-2xl bg-white/5 border border-white/10 flex flex-col justify-between hover:bg-white/10 transition-colors">
+                     <div className="text-white/50 text-sm mb-2 flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-400"/> System Status</div>
+                     <div className="text-xl font-bold text-emerald-400 mt-1">Online</div>
+                  </div>
+                </div>
 
+                {/* Graph Section */}
+                <div className="flex-1 bg-white/5 rounded-2xl p-6 border border-white/10 flex flex-col mt-auto">
+                  <div className="flex justify-between items-center mb-8">
+                    <div>
+                      <h3 className="text-lg font-semibold">Weekly Activity Trend</h3>
+                      <p className="text-xs text-white/50 mt-1">Simulated ticket generation over the last 7 days</p>
+                    </div>
+                    <div className="text-xs text-fuchsia-400 font-medium bg-fuchsia-500/10 px-3 py-1.5 rounded-lg border border-fuchsia-500/20">
+                      +12% vs last week
+                    </div>
+                  </div>
+                  
+                  {/* Tailwind CSS Bar Chart */}
+                  <div className="flex-1 flex items-end justify-between gap-2 h-48 border-b border-white/10 pb-2">
+                    {/* Simulated data percentages for heights */}
+                    {[45, 60, 35, 80, 55, 90, 65].map((val, i) => (
+                      <div key={i} className="flex flex-col items-center gap-3 w-full h-full group">
+                        <div className="w-full relative flex justify-center items-end h-full">
+                           {/* Hover Tooltip */}
+                           <div className="absolute -top-8 opacity-0 group-hover:opacity-100 transition-opacity bg-white text-black text-xs font-bold py-1 px-2 rounded shadow-lg pointer-events-none z-10">
+                             {val} Tkt
+                           </div>
+                           
+                           {/* The Bar */}
+                           <motion.div 
+                             initial={{ height: 0 }}
+                             animate={{ height: `${val}%` }}
+                             transition={{ duration: 1, delay: i * 0.1, ease: "easeOut" }}
+                             className="w-full max-w-[48px] bg-gradient-to-t from-indigo-500/40 to-fuchsia-500/80 rounded-t-md transition-all duration-300 group-hover:from-indigo-400 group-hover:to-fuchsia-400 group-hover:shadow-[0_0_15px_rgba(217,70,239,0.5)]" 
+                           ></motion.div>
+                        </div>
+                        {/* X-Axis Labels */}
+                        <span className="text-xs text-white/40 font-medium group-hover:text-white/80 transition-colors">
+                          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
             {activeTab === 'queues' && (
               <div>
                 <div className="flex justify-between items-center mb-6">
