@@ -23,4 +23,4 @@ This contains everything you need to run your app locally.
 ## Adding Hashed Password (Testing)
 
 ``` In terminal enter: node -e "console.log(require('bcryptjs').hashSync('543210', 10));" ```
-*Here 543210 is a passoword input for hashing*
+
