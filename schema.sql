@@ -1,5 +1,6 @@
 -- QSync Database Schema
 
+
 -- Users Table
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -34,9 +35,17 @@ CREATE TABLE tickets (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+CREATE TABLE admins (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 -- Insert Default Admin
-INSERT INTO users (full_name, email, password_hash, role) 
-VALUES ('Admin User', 'admin@qsync.com', '54321', 'admin');
+INSERT INTO admins (email, password_hash) 
+VALUES ('admin@qsync.com', '54321');
 -- Note: In a real app, '54321' should be a hashed password (e.g., using bcrypt).
 
 -- Insert Sample Queues

@@ -86,6 +86,143 @@ async function startServer() {
     }
   });
 
+  // --- Admin Login Endpoint ---
+  app.post('/api/admin/login', async (req, res) => {
+    try {
+      const { email } = req.body;
+      // Query the new 'admins' table instead of 'users'
+      const [rows] = await pool.query('SELECT * FROM admins WHERE email = ?', [email]);
+      const admins = rows as any[];
+      
+      if (admins.length === 0) {
+        return res.status(404).json({ success: false, message: 'Admin not found or invalid credentials' });
+      }
+      
+      // Return the hash to the frontend for bcrypt comparison
+      res.json({ 
+        success: true, 
+        user: { id: admins[0].id, email: admins[0].email, role: 'admin' }, 
+        passwordHash: admins[0].password_hash 
+      });
+    } catch (error) {
+      console.error('Admin login error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+// ==========================================
+  // ADMIN USER MANAGEMENT ROUTES
+  // ==========================================
+
+  // Get all users
+  app.get('/api/admin/users', async (req, res) => {
+    try {
+      const [rows] = await pool.query('SELECT id, full_name, email, created_at FROM users ORDER BY created_at DESC');
+      res.json({ success: true, users: rows });
+    } catch (error) {
+      console.error('Fetch users error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+  // Create a new user (Admin override)
+  app.post('/api/admin/users', async (req, res) => {
+    try {
+      const { fullName, email, passwordHash } = req.body;
+      const [result] = await pool.query(
+        'INSERT INTO users (full_name, email, password_hash) VALUES (?, ?, ?)',
+        [fullName, email, passwordHash]
+      );
+      res.json({ success: true, userId: (result as any).insertId });
+    } catch (error: any) {
+      console.error('Create user error:', error);
+      if (error.code === 'ER_DUP_ENTRY') {
+        res.status(400).json({ success: false, message: 'Email already exists' });
+      } else {
+        res.status(500).json({ success: false, message: 'Database error' });
+      }
+    }
+  });
+
+  // Delete a user
+  app.delete('/api/admin/users/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // First, delete associated tickets to prevent foreign key constraint errors
+      await pool.query('DELETE FROM tickets WHERE user_id = ?', [id]);
+      
+      // Then delete the user
+      const [result] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
+      
+      if ((result as any).affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+      res.json({ success: true, message: 'User deleted successfully' });
+    } catch (error) {
+      console.error('Delete user error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+  
+// ==========================================
+  // ADMIN TICKET / QR MANAGEMENT ROUTES
+  // ==========================================
+
+  // Get all tickets
+  app.get('/api/admin/tickets', async (req, res) => {
+    try {
+      const [rows] = await pool.query(`
+        SELECT t.*, u.full_name as user_name, u.email as user_email, q.name as queue_name 
+        FROM tickets t 
+        JOIN users u ON t.user_id = u.id 
+        JOIN queues q ON t.queue_id = q.id 
+        ORDER BY t.joined_at DESC
+      `);
+      res.json({ success: true, tickets: rows });
+    } catch (error) {
+      console.error('Fetch tickets error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+  // Update a ticket (Status, Date, Time)
+  app.put('/api/admin/tickets/:id', async (req, res) => {
+    try {
+      const ticketId = req.params.id;
+      const { status, appointment_date, time_period } = req.body;
+      
+      const [result] = await pool.query(
+        'UPDATE tickets SET status = ?, appointment_date = ?, time_period = ? WHERE id = ?',
+        [status, appointment_date, time_period, ticketId]
+      );
+      
+      if ((result as any).affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Ticket not found' });
+      }
+      res.json({ success: true, message: 'Ticket updated successfully' });
+    } catch (error) {
+      console.error('Update ticket error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+  // Delete a ticket
+  app.delete('/api/admin/tickets/:id', async (req, res) => {
+    try {
+      const ticketId = req.params.id;
+      const [result] = await pool.query('DELETE FROM tickets WHERE id = ?', [ticketId]);
+      
+      if ((result as any).affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Ticket not found' });
+      }
+      res.json({ success: true, message: 'Ticket deleted successfully' });
+    } catch (error) {
+      console.error('Delete ticket error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
   // Ensure tickets table has the required columns for the frontend
   const ensureTicketColumns = async () => {
     try {
@@ -136,7 +273,8 @@ async function startServer() {
       res.status(500).json({ success: false, message: 'Database error' });
     }
   });
-// Cancel a ticket
+
+  // Cancel a ticket
   app.put('/api/tickets/:id/cancel', async (req, res) => {
     try {
       const ticketId = req.params.id;
