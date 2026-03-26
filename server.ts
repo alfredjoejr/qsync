@@ -164,7 +164,7 @@ async function startServer() {
       res.status(500).json({ success: false, message: 'Database error' });
     }
   });
-  
+
 // ==========================================
   // ADMIN TICKET / QR MANAGEMENT ROUTES
   // ==========================================
@@ -222,6 +222,7 @@ async function startServer() {
       res.status(500).json({ success: false, message: 'Database error' });
     }
   });
+
 
   // Ensure tickets table has the required columns for the frontend
   const ensureTicketColumns = async () => {
@@ -296,6 +297,77 @@ async function startServer() {
     }
   });
   
+// ==========================================
+  // ADMIN QUEUES MANAGEMENT ROUTES
+  // ==========================================
+
+  // Get all queues (including inactive ones for admin view)
+  app.get('/api/admin/queues', async (req, res) => {
+    try {
+      const [rows] = await pool.query('SELECT * FROM queues ORDER BY id ASC');
+      res.json({ success: true, queues: rows });
+    } catch (error) {
+      console.error('Fetch admin queues error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+  // Create a new queue
+  app.post('/api/admin/queues', async (req, res) => {
+    try {
+      const { name, description, is_active } = req.body;
+      const [result] = await pool.query(
+        'INSERT INTO queues (name, description, is_active) VALUES (?, ?, ?)',
+        [name, description, is_active]
+      );
+      res.json({ success: true, queueId: (result as any).insertId });
+    } catch (error) {
+      console.error('Create queue error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+  // Update a queue
+  app.put('/api/admin/queues/:id', async (req, res) => {
+    try {
+      const queueId = req.params.id;
+      const { name, description, is_active } = req.body;
+      const [result] = await pool.query(
+        'UPDATE queues SET name = ?, description = ?, is_active = ? WHERE id = ?',
+        [name, description, is_active, queueId]
+      );
+      
+      if ((result as any).affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Queue not found' });
+      }
+      res.json({ success: true, message: 'Queue updated successfully' });
+    } catch (error) {
+      console.error('Update queue error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+  // Delete a queue
+  app.delete('/api/admin/queues/:id', async (req, res) => {
+    try {
+      const queueId = req.params.id;
+      
+      // Delete associated tickets first to avoid foreign key constraints
+      await pool.query('DELETE FROM tickets WHERE queue_id = ?', [queueId]);
+      
+      const [result] = await pool.query('DELETE FROM queues WHERE id = ?', [queueId]);
+      
+      if ((result as any).affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Queue not found' });
+      }
+      res.json({ success: true, message: 'Queue deleted successfully' });
+    } catch (error) {
+      console.error('Delete queue error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

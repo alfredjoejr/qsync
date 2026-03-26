@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Calendar, Clock, QrCode, Bell, User, X, CheckCircle2, ArrowRight, Plus, Ticket, History, ShieldAlert, Users, Trash2, Edit } from 'lucide-react';
+import { Calendar, Clock, QrCode, Bell, User, X, CheckCircle2, ArrowRight, Plus, Ticket, History, ShieldAlert, Users, Trash2, Edit, Layers } from 'lucide-react';
 import bcrypt from 'bcryptjs';
 
 const Background = () => (
@@ -348,11 +348,14 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
   const [activeTab, setActiveTab] = useState('overview');
   const [usersList, setUsersList] = useState<any[]>([]);
   const [ticketsList, setTicketsList] = useState<any[]>([]);
+  const [queuesList, setQueuesList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
   // Modals State
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditTicketModal, setShowEditTicketModal] = useState(false);
+  const [showAddQueueModal, setShowAddQueueModal] = useState(false);
+  const [showEditQueueModal, setShowEditQueueModal] = useState(false);
   
   // Add User State
   const [newUserName, setNewUserName] = useState('');
@@ -360,12 +363,19 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
   const [newUserPassword, setNewUserPassword] = useState('');
   const [addError, setAddError] = useState('');
 
+  // Queue State
+  const [newQueueName, setNewQueueName] = useState('');
+  const [newQueueDesc, setNewQueueDesc] = useState('');
+  const [newQueueActive, setNewQueueActive] = useState(true);
+  const [editQueueData, setEditQueueData] = useState<any>(null);
+
   // Edit Ticket State
   const [editTicketData, setEditTicketData] = useState<any>(null);
 
   useEffect(() => {
     if (activeTab === 'users') fetchUsers();
     if (activeTab === 'tickets') fetchTickets();
+    if (activeTab === 'queues' || activeTab === 'overview') fetchAdminQueues();
   }, [activeTab]);
 
   const fetchUsers = async () => {
@@ -373,9 +383,7 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
       const res = await fetch('/api/admin/users');
       const data = await res.json();
       if (data.success) setUsersList(data.users);
-    } catch (err) {
-      console.error('Failed to fetch users', err);
-    }
+    } catch (err) { console.error('Failed to fetch users', err); }
   };
 
   const fetchTickets = async () => {
@@ -383,11 +391,18 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
       const res = await fetch('/api/admin/tickets');
       const data = await res.json();
       if (data.success) setTicketsList(data.tickets);
-    } catch (err) {
-      console.error('Failed to fetch tickets', err);
-    }
+    } catch (err) { console.error('Failed to fetch tickets', err); }
   };
 
+  const fetchAdminQueues = async () => {
+    try {
+      const res = await fetch('/api/admin/queues');
+      const data = await res.json();
+      if (data.success) setQueuesList(data.queues);
+    } catch (err) { console.error('Failed to fetch queues', err); }
+  };
+
+  // --- Delete Handlers ---
   const handleDeleteUser = async (userId: number) => {
     if (!window.confirm('Are you sure you want to delete this user? This will also delete all their tickets.')) return;
     try {
@@ -395,9 +410,7 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
       const data = await res.json();
       if (data.success) fetchUsers();
       else alert('Failed to delete user: ' + data.message);
-    } catch (err) {
-      console.error('Delete error', err);
-    }
+    } catch (err) { console.error('Delete error', err); }
   };
 
   const handleDeleteTicket = async (ticketId: number) => {
@@ -407,15 +420,23 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
       const data = await res.json();
       if (data.success) fetchTickets();
       else alert('Failed to delete ticket: ' + data.message);
-    } catch (err) {
-      console.error('Delete error', err);
-    }
+    } catch (err) { console.error('Delete error', err); }
   };
 
+  const handleDeleteQueue = async (queueId: number) => {
+    if (!window.confirm('Are you sure you want to delete this queue? ALL associated tickets will also be deleted!')) return;
+    try {
+      const res = await fetch(`/api/admin/queues/${queueId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) fetchAdminQueues();
+      else alert('Failed to delete queue: ' + data.message);
+    } catch (err) { console.error('Delete error', err); }
+  };
+
+  // --- Submit Handlers ---
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAddError('');
-    setIsLoading(true);
+    setAddError(''); setIsLoading(true);
     try {
       const salt = bcrypt.genSaltSync(10);
       const passwordHash = bcrypt.hashSync(newUserPassword, salt);
@@ -426,57 +447,63 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
       });
       const data = await res.json();
       if (data.success) {
-        setShowAddModal(false);
-        setNewUserName(''); setNewUserEmail(''); setNewUserPassword('');
-        fetchUsers();
-      } else {
-        setAddError(data.message || 'Failed to add user');
-      }
-    } catch (err) {
-      setAddError('An error occurred.');
-    } finally {
-      setIsLoading(false);
-    }
+        setShowAddModal(false); setNewUserName(''); setNewUserEmail(''); setNewUserPassword(''); fetchUsers();
+      } else { setAddError(data.message || 'Failed to add user'); }
+    } catch (err) { setAddError('An error occurred.'); } 
+    finally { setIsLoading(false); }
   };
 
   const handleUpdateTicket = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
+    e.preventDefault(); setIsLoading(true);
     try {
       const res = await fetch(`/api/admin/tickets/${editTicketData.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: editTicketData.status,
-          appointment_date: editTicketData.appointment_date,
-          time_period: editTicketData.time_period
-        })
+        body: JSON.stringify({ status: editTicketData.status, appointment_date: editTicketData.appointment_date, time_period: editTicketData.time_period })
+      });
+      const data = await res.json();
+      if (data.success) { setShowEditTicketModal(false); fetchTickets(); } 
+      else { alert(data.message || 'Failed to update ticket'); }
+    } catch (err) { console.error('Update error', err); } 
+    finally { setIsLoading(false); }
+  };
+
+  const handleAddQueue = async (e: React.FormEvent) => {
+    e.preventDefault(); setIsLoading(true);
+    try {
+      const res = await fetch('/api/admin/queues', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newQueueName, description: newQueueDesc, is_active: newQueueActive })
       });
       const data = await res.json();
       if (data.success) {
-        setShowEditTicketModal(false);
-        fetchTickets();
-      } else {
-        alert(data.message || 'Failed to update ticket');
-      }
-    } catch (err) {
-      console.error('Update error', err);
-    } finally {
-      setIsLoading(false);
-    }
+        setShowAddQueueModal(false); setNewQueueName(''); setNewQueueDesc(''); setNewQueueActive(true); fetchAdminQueues();
+      } else { alert(data.message || 'Failed to add queue'); }
+    } catch (err) { console.error('Add queue error', err); } 
+    finally { setIsLoading(false); }
   };
 
-  const openEditTicketModal = (ticket: any) => {
-    // Format date for the HTML date input (YYYY-MM-DD)
-    const formattedDate = ticket.appointment_date ? new Date(ticket.appointment_date).toISOString().split('T')[0] : '';
-    setEditTicketData({ ...ticket, appointment_date: formattedDate });
-    setShowEditTicketModal(true);
+  const handleUpdateQueue = async (e: React.FormEvent) => {
+    e.preventDefault(); setIsLoading(true);
+    try {
+      const res = await fetch(`/api/admin/queues/${editQueueData.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editQueueData.name, description: editQueueData.description, is_active: editQueueData.is_active })
+      });
+      const data = await res.json();
+      if (data.success) { setShowEditQueueModal(false); fetchAdminQueues(); } 
+      else { alert(data.message || 'Failed to update queue'); }
+    } catch (err) { console.error('Update queue error', err); } 
+    finally { setIsLoading(false); }
   };
 
   return (
     <div className="min-h-screen text-white p-6">
       <Background />
       <div className="relative z-10 max-w-7xl mx-auto space-y-6">
+        
         {/* Admin Header */}
         <div className="glass-panel p-6 rounded-3xl flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-4">
@@ -505,6 +532,9 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
             <button onClick={() => setActiveTab('overview')} className={`text-left px-4 py-3 rounded-xl transition-all ${activeTab === 'overview' ? 'bg-white/10 border border-white/20 shadow-lg' : 'hover:bg-white/5 text-white/70 hover:text-white'}`}>
               <div className="flex items-center gap-3"><Clock className="w-5 h-5" /> Overview</div>
             </button>
+            <button onClick={() => setActiveTab('queues')} className={`text-left px-4 py-3 rounded-xl transition-all ${activeTab === 'queues' ? 'bg-white/10 border border-white/20 shadow-lg' : 'hover:bg-white/5 text-white/70 hover:text-white'}`}>
+              <div className="flex items-center gap-3"><Layers className="w-5 h-5" /> Manage Queues</div>
+            </button>
             <button onClick={() => setActiveTab('users')} className={`text-left px-4 py-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-white/10 border border-white/20 shadow-lg' : 'hover:bg-white/5 text-white/70 hover:text-white'}`}>
               <div className="flex items-center gap-3"><Users className="w-5 h-5" /> Manage Users</div>
             </button>
@@ -522,7 +552,7 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
                      <div className="text-white/50 text-sm mb-1">Total Queues</div>
-                     <div className="text-4xl font-bold">3</div>
+                     <div className="text-4xl font-bold">{queuesList.length}</div>
                   </div>
                   <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
                      <div className="text-white/50 text-sm mb-1">System Status</div>
@@ -532,6 +562,57 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
               </div>
             )}
 
+            {activeTab === 'queues' && (
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold">Service Queues</h2>
+                  <button onClick={() => setShowAddQueueModal(true)} className="px-4 py-2 bg-white text-black text-sm font-semibold rounded-xl flex items-center gap-2 hover:bg-white/90 transition-colors">
+                    <Plus className="w-4 h-4" /> Add Queue
+                  </button>
+                </div>
+                <div className="overflow-x-auto rounded-2xl border border-white/10">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-white/5 border-b border-white/10">
+                      <tr>
+                        <th className="px-6 py-4 font-medium text-white/80">ID</th>
+                        <th className="px-6 py-4 font-medium text-white/80">Name</th>
+                        <th className="px-6 py-4 font-medium text-white/80">Description</th>
+                        <th className="px-6 py-4 font-medium text-white/80">Status</th>
+                        <th className="px-6 py-4 font-medium text-white/80 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {queuesList.length === 0 ? (
+                        <tr><td colSpan={5} className="px-6 py-8 text-center text-white/50">No queues found.</td></tr>
+                      ) : (
+                        queuesList.map((q) => (
+                          <tr key={q.id} className="hover:bg-white/5 transition-colors">
+                            <td className="px-6 py-4 text-white/60">#{q.id}</td>
+                            <td className="px-6 py-4 font-bold text-indigo-300">{q.name}</td>
+                            <td className="px-6 py-4 text-white/60 max-w-[200px] truncate">{q.description || 'No description'}</td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium border ${q.is_active ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
+                                {q.is_active ? 'ACTIVE' : 'INACTIVE'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button onClick={() => { setEditQueueData(q); setShowEditQueueModal(true); }} className="p-2 text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors inline-flex mr-2">
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => handleDeleteQueue(q.id)} className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors inline-flex">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Existing Users Tab */}
             {activeTab === 'users' && (
               <div>
                 <div className="flex justify-between items-center mb-6">
@@ -547,36 +628,32 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
                         <th className="px-6 py-4 font-medium text-white/80">ID</th>
                         <th className="px-6 py-4 font-medium text-white/80">Name</th>
                         <th className="px-6 py-4 font-medium text-white/80">Email</th>
-                        <th className="px-6 py-4 font-medium text-white/80">Joined</th>
                         <th className="px-6 py-4 font-medium text-white/80 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {usersList.length === 0 ? (
-                        <tr><td colSpan={5} className="px-6 py-8 text-center text-white/50">No users found.</td></tr>
-                      ) : (
-                        usersList.map((user) => (
-                          <tr key={user.id} className="hover:bg-white/5 transition-colors">
-                            <td className="px-6 py-4 text-white/60">#{user.id}</td>
-                            <td className="px-6 py-4 font-medium">{user.full_name}</td>
-                            <td className="px-6 py-4 text-white/80">{user.email}</td>
-                            <td className="px-6 py-4 text-white/60">{new Date(user.created_at).toLocaleDateString()}</td>
-                            <td className="px-6 py-4 text-right">
-                              <button onClick={() => handleDeleteUser(user.id)} className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors inline-flex" title="Delete User">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
+                      {usersList.map((user) => (
+                        <tr key={user.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-4 text-white/60">#{user.id}</td>
+                          <td className="px-6 py-4 font-medium">{user.full_name}</td>
+                          <td className="px-6 py-4 text-white/80">{user.email}</td>
+                          <td className="px-6 py-4 text-right">
+                            <button onClick={() => handleDeleteUser(user.id)} className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors inline-flex">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
               </div>
             )}
 
+            {/* Existing Tickets Tab */}
             {activeTab === 'tickets' && (
-              <div>
+               // ... existing tickets table content ...
+               <div>
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-2xl font-bold">Tickets / QR Management</h2>
                 </div>
@@ -588,137 +665,120 @@ const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout:
                         <th className="px-6 py-4 font-medium text-white/80">User</th>
                         <th className="px-6 py-4 font-medium text-white/80">Service</th>
                         <th className="px-6 py-4 font-medium text-white/80">Status</th>
-                        <th className="px-6 py-4 font-medium text-white/80">Date & Time</th>
                         <th className="px-6 py-4 font-medium text-white/80 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {ticketsList.length === 0 ? (
-                        <tr><td colSpan={6} className="px-6 py-8 text-center text-white/50">No tickets found.</td></tr>
-                      ) : (
-                        ticketsList.map((ticket) => (
+                        {ticketsList.map((ticket) => (
                           <tr key={ticket.id} className="hover:bg-white/5 transition-colors">
                             <td className="px-6 py-4 font-bold text-fuchsia-400">{ticket.ticket_number}</td>
                             <td className="px-6 py-4">
                               <div className="font-medium">{ticket.user_name}</div>
-                              <div className="text-xs text-white/50">{ticket.user_email}</div>
                             </td>
                             <td className="px-6 py-4 text-white/80">{ticket.queue_name}</td>
                             <td className="px-6 py-4">
-                               <span className={`px-2 py-1 rounded-full text-xs font-medium border ${
-                                 ticket.status === 'completed' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
-                                 ticket.status === 'cancelled' ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' :
-                                 ticket.status === 'serving' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' :
-                                 'bg-white/10 border-white/20 text-white/80'
-                               }`}>
-                                 {ticket.status.toUpperCase()}
-                               </span>
-                            </td>
-                            <td className="px-6 py-4 text-white/60">
-                              {ticket.appointment_date ? new Date(ticket.appointment_date).toLocaleDateString() : 'N/A'} <br/>
-                              <span className="text-xs">{ticket.time_period}</span>
+                               <span className={`px-2 py-1 rounded-full text-xs font-medium border ${ticket.status === 'completed' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-white/10 border-white/20 text-white/80'}`}>{ticket.status.toUpperCase()}</span>
                             </td>
                             <td className="px-6 py-4 text-right">
-                              <button onClick={() => openEditTicketModal(ticket)} className="p-2 text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors inline-flex mr-2" title="Edit Ticket">
+                              <button onClick={() => {
+                                const formattedDate = ticket.appointment_date ? new Date(ticket.appointment_date).toISOString().split('T')[0] : '';
+                                setEditTicketData({ ...ticket, appointment_date: formattedDate });
+                                setShowEditTicketModal(true);
+                              }} className="p-2 text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors inline-flex mr-2">
                                 <Edit className="w-4 h-4" />
                               </button>
-                              <button onClick={() => handleDeleteTicket(ticket.id)} className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors inline-flex" title="Delete Ticket">
+                              <button onClick={() => handleDeleteTicket(ticket.id)} className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors inline-flex">
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </td>
                           </tr>
-                        ))
-                      )}
+                        ))}
                     </tbody>
                   </table>
                 </div>
               </div>
             )}
-
           </div>
         </div>
       </div>
 
-      {/* Edit Ticket Modal */}
+      {/* --- QUEUE MODALS --- */}
       <AnimatePresence>
+        {/* ADD QUEUE MODAL */}
+        {showAddQueueModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAddQueueModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-panel w-full max-w-md rounded-3xl p-8 relative z-10 border-t border-l border-white/20 shadow-2xl">
+              <button onClick={() => setShowAddQueueModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+              <h2 className="text-2xl font-bold mb-6">Add New Queue</h2>
+              <form className="space-y-4" onSubmit={handleAddQueue}>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Queue Name</label><input type="text" value={newQueueName} onChange={e => setNewQueueName(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" placeholder="e.g. Consular Services" required /></div>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Description</label><textarea value={newQueueDesc} onChange={e => setNewQueueDesc(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" placeholder="Details about this queue..." rows={3} /></div>
+                <div className="flex items-center gap-3 mt-4">
+                  <input type="checkbox" id="queueActive" checked={newQueueActive} onChange={e => setNewQueueActive(e.target.checked)} className="w-5 h-5 accent-indigo-500" />
+                  <label htmlFor="queueActive" className="text-sm font-medium text-white/80 cursor-pointer">Queue is Active</label>
+                </div>
+                <button disabled={isLoading} className="w-full py-3 rounded-xl bg-white text-black font-semibold mt-6 hover:bg-white/90 transition-colors disabled:opacity-50">{isLoading ? 'Saving...' : 'Create Queue'}</button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* EDIT QUEUE MODAL */}
+        {showEditQueueModal && editQueueData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEditQueueModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-panel w-full max-w-md rounded-3xl p-8 relative z-10 border-t border-l border-white/20 shadow-2xl">
+              <button onClick={() => setShowEditQueueModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+              <h2 className="text-2xl font-bold mb-6">Edit Queue</h2>
+              <form className="space-y-4" onSubmit={handleUpdateQueue}>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Queue Name</label><input type="text" value={editQueueData.name} onChange={e => setEditQueueData({...editQueueData, name: e.target.value})} className="w-full glass-input rounded-xl px-4 py-3 text-sm" required /></div>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Description</label><textarea value={editQueueData.description || ''} onChange={e => setEditQueueData({...editQueueData, description: e.target.value})} className="w-full glass-input rounded-xl px-4 py-3 text-sm" rows={3} /></div>
+                <div className="flex items-center gap-3 mt-4">
+                  <input type="checkbox" id="editQueueActive" checked={!!editQueueData.is_active} onChange={e => setEditQueueData({...editQueueData, is_active: e.target.checked})} className="w-5 h-5 accent-indigo-500" />
+                  <label htmlFor="editQueueActive" className="text-sm font-medium text-white/80 cursor-pointer">Queue is Active</label>
+                </div>
+                <button disabled={isLoading} className="w-full py-3 rounded-xl bg-white text-black font-semibold mt-6 hover:bg-white/90 transition-colors disabled:opacity-50">{isLoading ? 'Saving...' : 'Save Changes'}</button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* --- EXISTING MODALS (USER / TICKET) KEEP THESE --- */}
+        {showAddModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAddModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-panel w-full max-w-md rounded-3xl p-8 relative z-10 border-t border-l border-white/20 shadow-2xl">
+              <button onClick={() => setShowAddModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+              <h2 className="text-2xl font-bold mb-6">Add New User</h2>
+              <form className="space-y-4" onSubmit={handleAddUser}>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Full Name</label><input type="text" value={newUserName} onChange={e => setNewUserName(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" required /></div>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Email</label><input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" required /></div>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Password</label><input type="password" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" required /></div>
+                {addError && <p className="text-rose-400 text-sm text-center mt-2">{addError}</p>}
+                <button disabled={isLoading} className="w-full py-3 rounded-xl bg-white text-black font-semibold mt-6 hover:bg-white/90 transition-colors disabled:opacity-50">{isLoading ? 'Creating...' : 'Create User'}</button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+        
         {showEditTicketModal && editTicketData && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEditTicketModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-panel w-full max-w-md rounded-3xl p-8 relative z-10 border-t border-l border-white/20 shadow-2xl">
-              <button onClick={() => setShowEditTicketModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-              
+              <button onClick={() => setShowEditTicketModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
               <h2 className="text-2xl font-bold mb-2">Modify Ticket</h2>
-              <p className="text-fuchsia-400 font-bold mb-6">{editTicketData.ticket_number}</p>
-
               <form className="space-y-4" onSubmit={handleUpdateTicket}>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-white/80 ml-1">Status</label>
-                  <select 
-                    value={editTicketData.status} 
-                    onChange={e => setEditTicketData({...editTicketData, status: e.target.value})} 
-                    className="w-full glass-input rounded-xl px-4 py-3 text-sm appearance-none bg-gray-900"
-                  >
-                    <option value="waiting">Waiting</option>
-                    <option value="serving">Serving</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </div>
-                
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-white/80 ml-1">Appointment Date</label>
-                  <input 
-                    type="date" 
-                    value={editTicketData.appointment_date} 
-                    onChange={e => setEditTicketData({...editTicketData, appointment_date: e.target.value})} 
-                    className="w-full glass-input rounded-xl px-4 py-3 text-sm [color-scheme:dark]" 
-                    required 
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-white/80 ml-1">Time Period</label>
-                  <select 
-                    value={editTicketData.time_period} 
-                    onChange={e => setEditTicketData({...editTicketData, time_period: e.target.value})} 
-                    className="w-full glass-input rounded-xl px-4 py-3 text-sm appearance-none bg-gray-900"
-                  >
-                    <option value="Morning">Morning</option>
-                    <option value="Evening">Evening</option>
-                  </select>
-                </div>
-                
-                <button disabled={isLoading} className="w-full py-3 rounded-xl bg-white text-black font-semibold mt-6 hover:bg-white/90 transition-colors disabled:opacity-50">
-                  {isLoading ? 'Saving...' : 'Save Changes'}
-                </button>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Status</label><select value={editTicketData.status} onChange={e => setEditTicketData({...editTicketData, status: e.target.value})} className="w-full glass-input rounded-xl px-4 py-3 text-sm appearance-none bg-gray-900"><option value="waiting">Waiting</option><option value="serving">Serving</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></div>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Appointment Date</label><input type="date" value={editTicketData.appointment_date} onChange={e => setEditTicketData({...editTicketData, appointment_date: e.target.value})} className="w-full glass-input rounded-xl px-4 py-3 text-sm [color-scheme:dark]" required /></div>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Time Period</label><select value={editTicketData.time_period} onChange={e => setEditTicketData({...editTicketData, time_period: e.target.value})} className="w-full glass-input rounded-xl px-4 py-3 text-sm appearance-none bg-gray-900"><option value="Morning">Morning</option><option value="Evening">Evening</option></select></div>
+                <button disabled={isLoading} className="w-full py-3 rounded-xl bg-white text-black font-semibold mt-6 hover:bg-white/90 transition-colors disabled:opacity-50">{isLoading ? 'Saving...' : 'Save Changes'}</button>
               </form>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* Add User Modal */}
-      <AnimatePresence>
-        {showAddModal && (
-            // ... (Your existing Add User Modal Code here from previous prompt) ...
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAddModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-panel w-full max-w-md rounded-3xl p-8 relative z-10 border-t border-l border-white/20 shadow-2xl">
-                <button onClick={() => setShowAddModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
-                <h2 className="text-2xl font-bold mb-6">Add New User</h2>
-                <form className="space-y-4" onSubmit={handleAddUser}>
-                  <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Full Name</label><input type="text" value={newUserName} onChange={e => setNewUserName(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" placeholder="John Doe" required /></div>
-                  <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Email</label><input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" placeholder="user@example.com" required /></div>
-                  <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Password</label><input type="password" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" placeholder="••••••••" required /></div>
-                  {addError && <p className="text-rose-400 text-sm text-center mt-2">{addError}</p>}
-                  <button disabled={isLoading} className="w-full py-3 rounded-xl bg-white text-black font-semibold mt-6 hover:bg-white/90 transition-colors disabled:opacity-50">{isLoading ? 'Creating...' : 'Create User'}</button>
-                </form>
-              </motion.div>
-            </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
