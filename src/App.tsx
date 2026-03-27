@@ -994,7 +994,13 @@ const Dashboard = ({ userId }: { userId?: number }) => {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-white/80">Select Date</label>
-                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm [color-scheme:dark]" required />
+                      <input 
+                      type="date" 
+                      value={date} 
+                      min={new Date().toISOString().split('T')[0]} /* <-- Add this line */
+                      onChange={e => setDate(e.target.value)} 
+                      className="w-full glass-input rounded-xl px-4 py-3 text-sm [color-scheme:dark]" 
+                      required />                  
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-white/80">Time Period</label>
