@@ -43,10 +43,6 @@ CREATE TABLE admins (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Insert Default Admin
-INSERT INTO admins (email, password_hash) 
-VALUES ('admin@qsync.com', '54321');
--- Note: In a real app, '54321' should be a hashed password (e.g., using bcrypt).
 
 -- Insert Sample Queues
 INSERT INTO queues (name, description) VALUES 
