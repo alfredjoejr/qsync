@@ -19,3 +19,8 @@ This contains everything you need to run your app locally.
 3. All database information must be fed in .env.example
 
 4. Please run the scheme in schema.sql before testing the backend.
+
+## Adding Hashed Password (Testing)
+
+``` In terminal enter: node -e "console.log(require('bcryptjs').hashSync('543210', 10));" ```
+

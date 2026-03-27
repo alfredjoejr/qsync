@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Calendar, Clock, QrCode, Bell, User, X, CheckCircle2, ArrowRight, Plus, Ticket, History } from 'lucide-react';
+import { Calendar, Clock, QrCode, Bell, User, X, CheckCircle2, ArrowRight, Plus, Ticket, History, ShieldAlert, Users, Trash2, Edit, Layers } from 'lucide-react';
 import bcrypt from 'bcryptjs';
 
 const Background = () => (
@@ -34,7 +34,7 @@ const Navbar = ({ onAuth, isLoggedIn, userEmail, onLogout, currentView, onViewCh
         
         <div className="hidden md:flex items-center gap-8 text-sm font-medium text-white/80">
           {isLoggedIn && (
-            <button onClick={() => onViewChange('dashboard')} className={`hover:text-white transition-colors ${currentView === 'dashboard' ? 'text-white font-semibold' : ''}`}>Dashboard</button>
+            <button onClick={() => onViewChange('dashboard')} className={`hover:text-white transition-colors ${currentView === 'dashboard' ? 'text-white font-semibold' : ''}`}></button>
           )}
         </div>
 
@@ -146,7 +146,7 @@ const Features = () => {
   );
 };
 
-const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'signup', onClose: () => void, onSwitch: () => void, onSuccess: (user: { id: number, email: string }) => void }) => {
+const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'signup', onClose: () => void, onSwitch: () => void, onSuccess: (user: { id: number, email: string, role?: string }) => void }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -160,7 +160,6 @@ const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'si
     
     try {
       if (type === 'signup') {
-        // Hash the password on the frontend as requested
         const salt = bcrypt.genSaltSync(10);
         const passwordHash = bcrypt.hashSync(password, salt);
         
@@ -172,12 +171,11 @@ const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'si
         
         const data = await res.json();
         if (data.success) {
-          onSuccess({ id: data.userId, email });
+          onSuccess({ id: data.userId, email, role: 'customer' });
         } else {
           setError(data.message || 'Signup failed');
         }
       } else {
-        // Login
         const res = await fetch('/api/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -186,10 +184,9 @@ const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'si
         
         const data = await res.json();
         if (data.success) {
-          // Compare the password with the hash from the database
           const isValid = bcrypt.compareSync(password, data.passwordHash);
           if (isValid) {
-            onSuccess({ id: data.user.id, email: data.user.email });
+            onSuccess({ id: data.user.id, email: data.user.email, role: data.user.role });
           } else {
             setError('Invalid credentials');
           }
@@ -264,6 +261,604 @@ const AuthModal = ({ type, onClose, onSwitch, onSuccess }: { type: 'login' | 'si
   );
 };
 
+// ==========================================
+// ADMIN COMPONENTS
+// ==========================================
+
+const AdminLogin = ({ onSuccess }: { onSuccess: (user: any) => void }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleAdminLogin = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError('');
+      setIsLoading(true);
+
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          const isValid = bcrypt.compareSync(password, data.passwordHash);
+          if (isValid) {
+            onSuccess(data.user);
+          } else {
+            setError('Invalid credentials.');
+          }
+        } else {
+          setError(data.message || 'Invalid credentials.');
+        }
+      } catch (err) {
+        setError('An error occurred. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+  };
+  
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 text-white">
+      <Background />
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="glass-panel w-full max-w-md rounded-3xl p-8 border-t border-l border-white/20 shadow-2xl relative z-10"
+      >
+        <div className="flex justify-center mb-6">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-rose-500 to-orange-500 flex items-center justify-center shadow-[0_0_30px_rgba(244,63,94,0.4)]">
+            <ShieldAlert className="w-8 h-8 text-white" />
+          </div>
+        </div>
+        <h2 className="text-3xl font-bold mb-2 text-center">Admin Portal</h2>
+        <p className="text-white/60 mb-8 text-center text-sm">Secure access for authorized personnel only.</p>
+
+        <form className="space-y-4" onSubmit={handleAdminLogin}>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-white/80 ml-1">Administrator Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm focus:border-rose-400" placeholder="admin@qsync.com" required />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-white/80 ml-1">Password</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm focus:border-rose-400" placeholder="••••••••" required />
+          </div>
+
+          {error && <p className="text-rose-400 text-sm text-center mt-2 bg-rose-500/10 py-2 rounded-lg border border-rose-500/20">{error}</p>}
+
+          <button disabled={isLoading} className="w-full py-4 rounded-xl bg-gradient-to-r from-rose-500 to-orange-500 text-white font-bold mt-6 hover:shadow-[0_0_20px_rgba(244,63,94,0.4)] transition-all disabled:opacity-50">
+            {isLoading ? 'Authenticating...' : 'Secure Login'}
+          </button>
+        </form>
+        
+        <div className="mt-8 pt-6 border-t border-white/10 text-center">
+            <button onClick={() => window.location.href = '/'} className="text-sm text-white/40 hover:text-white/80 transition-colors">
+              Return to Public Site
+            </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const AdminDashboard = ({ userEmail, onLogout }: { userEmail?: string, onLogout: () => void }) => {
+  const [activeTab, setActiveTab] = useState('overview');
+  const [usersList, setUsersList] = useState<any[]>([]);
+  const [ticketsList, setTicketsList] = useState<any[]>([]);
+  const [queuesList, setQueuesList] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Modals State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditTicketModal, setShowEditTicketModal] = useState(false);
+  const [showAddQueueModal, setShowAddQueueModal] = useState(false);
+  const [showEditQueueModal, setShowEditQueueModal] = useState(false);
+  
+  // Add User State
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [addError, setAddError] = useState('');
+
+  // Queue State
+  const [newQueueName, setNewQueueName] = useState('');
+  const [newQueueDesc, setNewQueueDesc] = useState('');
+  const [newQueueActive, setNewQueueActive] = useState(true);
+  const [editQueueData, setEditQueueData] = useState<any>(null);
+
+  // Edit Ticket State
+  const [editTicketData, setEditTicketData] = useState<any>(null);
+
+  useEffect(() => {
+    // When on a specific tab, fetch only what is needed for that tab
+    if (activeTab === 'users') fetchUsers();
+    if (activeTab === 'tickets') fetchTickets();
+    if (activeTab === 'queues') fetchAdminQueues();
+    
+    // When on the overview tab, fetch EVERYTHING so the stats are accurate immediately
+    if (activeTab === 'overview') {
+      fetchAdminQueues();
+      fetchUsers();
+      fetchTickets();
+    }
+  }, [activeTab]);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch('/api/admin/users');
+      const data = await res.json();
+      if (data.success) setUsersList(data.users);
+    } catch (err) { console.error('Failed to fetch users', err); }
+  };
+
+  const fetchTickets = async () => {
+    try {
+      const res = await fetch('/api/admin/tickets');
+      const data = await res.json();
+      if (data.success) setTicketsList(data.tickets);
+    } catch (err) { console.error('Failed to fetch tickets', err); }
+  };
+
+  const fetchAdminQueues = async () => {
+    try {
+      const res = await fetch('/api/admin/queues');
+      const data = await res.json();
+      if (data.success) setQueuesList(data.queues);
+    } catch (err) { console.error('Failed to fetch queues', err); }
+  };
+
+  // --- Delete Handlers ---
+  const handleDeleteUser = async (userId: number) => {
+    if (!window.confirm('Are you sure you want to delete this user? This will also delete all their tickets.')) return;
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) fetchUsers();
+      else alert('Failed to delete user: ' + data.message);
+    } catch (err) { console.error('Delete error', err); }
+  };
+
+  const handleDeleteTicket = async (ticketId: number) => {
+    if (!window.confirm('Are you sure you want to permanently delete this ticket?')) return;
+    try {
+      const res = await fetch(`/api/admin/tickets/${ticketId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) fetchTickets();
+      else alert('Failed to delete ticket: ' + data.message);
+    } catch (err) { console.error('Delete error', err); }
+  };
+
+  const handleDeleteQueue = async (queueId: number) => {
+    if (!window.confirm('Are you sure you want to delete this queue? ALL associated tickets will also be deleted!')) return;
+    try {
+      const res = await fetch(`/api/admin/queues/${queueId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) fetchAdminQueues();
+      else alert('Failed to delete queue: ' + data.message);
+    } catch (err) { console.error('Delete error', err); }
+  };
+
+  // --- Submit Handlers ---
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddError(''); setIsLoading(true);
+    try {
+      const salt = bcrypt.genSaltSync(10);
+      const passwordHash = bcrypt.hashSync(newUserPassword, salt);
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fullName: newUserName, email: newUserEmail, passwordHash })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowAddModal(false); setNewUserName(''); setNewUserEmail(''); setNewUserPassword(''); fetchUsers();
+      } else { setAddError(data.message || 'Failed to add user'); }
+    } catch (err) { setAddError('An error occurred.'); } 
+    finally { setIsLoading(false); }
+  };
+
+  const handleUpdateTicket = async (e: React.FormEvent) => {
+    e.preventDefault(); setIsLoading(true);
+    try {
+      const res = await fetch(`/api/admin/tickets/${editTicketData.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: editTicketData.status, appointment_date: editTicketData.appointment_date, time_period: editTicketData.time_period })
+      });
+      const data = await res.json();
+      if (data.success) { setShowEditTicketModal(false); fetchTickets(); } 
+      else { alert(data.message || 'Failed to update ticket'); }
+    } catch (err) { console.error('Update error', err); } 
+    finally { setIsLoading(false); }
+  };
+
+  const handleAddQueue = async (e: React.FormEvent) => {
+    e.preventDefault(); setIsLoading(true);
+    try {
+      const res = await fetch('/api/admin/queues', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newQueueName, description: newQueueDesc, is_active: newQueueActive })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowAddQueueModal(false); setNewQueueName(''); setNewQueueDesc(''); setNewQueueActive(true); fetchAdminQueues();
+      } else { alert(data.message || 'Failed to add queue'); }
+    } catch (err) { console.error('Add queue error', err); } 
+    finally { setIsLoading(false); }
+  };
+
+  const handleUpdateQueue = async (e: React.FormEvent) => {
+    e.preventDefault(); setIsLoading(true);
+    try {
+      const res = await fetch(`/api/admin/queues/${editQueueData.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editQueueData.name, description: editQueueData.description, is_active: editQueueData.is_active })
+      });
+      const data = await res.json();
+      if (data.success) { setShowEditQueueModal(false); fetchAdminQueues(); } 
+      else { alert(data.message || 'Failed to update queue'); }
+    } catch (err) { console.error('Update queue error', err); } 
+    finally { setIsLoading(false); }
+  };
+
+  return (
+    <div className="min-h-screen text-white p-6">
+      <Background />
+      <div className="relative z-10 max-w-7xl mx-auto space-y-6">
+        
+        {/* Admin Header */}
+        <div className="glass-panel p-6 rounded-3xl flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-rose-500 to-orange-500 flex items-center justify-center shadow-lg">
+              <ShieldAlert className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+              <p className="text-white/60 text-sm">Manage queues, tickets, and staff</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-medium">{userEmail}</p>
+              <p className="text-xs text-rose-400">System Administrator</p>
+            </div>
+            <button onClick={onLogout} className="glass-button px-6 py-2.5 rounded-xl text-sm font-medium border-rose-500/30 hover:bg-rose-500/20 text-rose-100 transition-all">
+              Sign Out
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-8">
+          {/* Admin Sidebar */}
+          <div className="w-full md:w-64 flex flex-col gap-2">
+            <button onClick={() => setActiveTab('overview')} className={`text-left px-4 py-3 rounded-xl transition-all ${activeTab === 'overview' ? 'bg-white/10 border border-white/20 shadow-lg' : 'hover:bg-white/5 text-white/70 hover:text-white'}`}>
+              <div className="flex items-center gap-3"><Clock className="w-5 h-5" /> Overview</div>
+            </button>
+            <button onClick={() => setActiveTab('queues')} className={`text-left px-4 py-3 rounded-xl transition-all ${activeTab === 'queues' ? 'bg-white/10 border border-white/20 shadow-lg' : 'hover:bg-white/5 text-white/70 hover:text-white'}`}>
+              <div className="flex items-center gap-3"><Layers className="w-5 h-5" /> Manage Queues</div>
+            </button>
+            <button onClick={() => setActiveTab('users')} className={`text-left px-4 py-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-white/10 border border-white/20 shadow-lg' : 'hover:bg-white/5 text-white/70 hover:text-white'}`}>
+              <div className="flex items-center gap-3"><Users className="w-5 h-5" /> Manage Users</div>
+            </button>
+            <button onClick={() => setActiveTab('tickets')} className={`text-left px-4 py-3 rounded-xl transition-all ${activeTab === 'tickets' ? 'bg-white/10 border border-white/20 shadow-lg' : 'hover:bg-white/5 text-white/70 hover:text-white'}`}>
+              <div className="flex items-center gap-3"><QrCode className="w-5 h-5" /> Manage Tickets</div>
+            </button>
+          </div>
+
+          {/* Main Content Area */}
+          <div className="flex-1 glass-panel p-8 rounded-3xl min-h-[500px] overflow-hidden">
+                       {activeTab === 'overview' && (
+              <div>
+                <h2 className="text-2xl font-bold mb-6">System Overview</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
+                     <div className="text-white/50 text-sm mb-1">Total Queues</div>
+                     <div className="text-4xl font-bold">{queuesList.length}</div>
+                  </div>
+                  <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
+                     <div className="text-white/50 text-sm mb-1">System Status</div>
+                     <div className="text-2xl font-bold text-emerald-400 mt-2 flex items-center gap-2"><CheckCircle2 className="w-6 h-6"/> Online</div>
+                  </div>
+                </div>
+              </div>
+            )}
+ 
+            {activeTab === 'overview' && (
+              <div className="flex flex-col h-full min-h-[450px]">
+                <h2 className="text-2xl font-bold mb-6">System Overview</h2>
+                
+                {/* Top Stat Cards Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                  <div className="p-5 rounded-2xl bg-white/5 border border-white/10 flex flex-col justify-between hover:bg-white/10 transition-colors">
+                     <div className="text-white/50 text-sm mb-2 flex items-center gap-2"><Layers className="w-4 h-4 text-indigo-400"/> Total Queues</div>
+                     <div className="text-3xl font-bold">{queuesList.length}</div>
+                  </div>
+                  <div className="p-5 rounded-2xl bg-white/5 border border-white/10 flex flex-col justify-between hover:bg-white/10 transition-colors">
+                     <div className="text-white/50 text-sm mb-2 flex items-center gap-2"><Users className="w-4 h-4 text-fuchsia-400"/> Total Users</div>
+                     <div className="text-3xl font-bold">{usersList.length}</div>
+                  </div>
+                  <div className="p-5 rounded-2xl bg-white/5 border border-white/10 flex flex-col justify-between hover:bg-white/10 transition-colors">
+                     <div className="text-white/50 text-sm mb-2 flex items-center gap-2"><QrCode className="w-4 h-4 text-rose-400"/> Total Tickets</div>
+                     <div className="text-3xl font-bold">{ticketsList.length}</div>
+                  </div>
+                  <div className="p-5 rounded-2xl bg-white/5 border border-white/10 flex flex-col justify-between hover:bg-white/10 transition-colors">
+                     <div className="text-white/50 text-sm mb-2 flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-400"/> System Status</div>
+                     <div className="text-xl font-bold text-emerald-400 mt-1">Online</div>
+                  </div>
+                </div>
+
+                {/* Graph Section */}
+                <div className="flex-1 bg-white/5 rounded-2xl p-6 border border-white/10 flex flex-col mt-auto">
+                  <div className="flex justify-between items-center mb-8">
+                    <div>
+                      <h3 className="text-lg font-semibold">Weekly Activity Trend</h3>
+                      <p className="text-xs text-white/50 mt-1">Simulated ticket generation over the last 7 days</p>
+                    </div>
+                    <div className="text-xs text-fuchsia-400 font-medium bg-fuchsia-500/10 px-3 py-1.5 rounded-lg border border-fuchsia-500/20">
+                      +12% vs last week
+                    </div>
+                  </div>
+                  
+                  {/* Tailwind CSS Bar Chart */}
+                  <div className="flex-1 flex items-end justify-between gap-2 h-48 border-b border-white/10 pb-2">
+                    {/* Simulated data percentages for heights */}
+                    {[45, 60, 35, 80, 55, 90, 65].map((val, i) => (
+                      <div key={i} className="flex flex-col items-center gap-3 w-full h-full group">
+                        <div className="w-full relative flex justify-center items-end h-full">
+                           {/* Hover Tooltip */}
+                           <div className="absolute -top-8 opacity-0 group-hover:opacity-100 transition-opacity bg-white text-black text-xs font-bold py-1 px-2 rounded shadow-lg pointer-events-none z-10">
+                             {val} Tkt
+                           </div>
+                           
+                           {/* The Bar */}
+                           <motion.div 
+                             initial={{ height: 0 }}
+                             animate={{ height: `${val}%` }}
+                             transition={{ duration: 1, delay: i * 0.1, ease: "easeOut" }}
+                             className="w-full max-w-[48px] bg-gradient-to-t from-indigo-500/40 to-fuchsia-500/80 rounded-t-md transition-all duration-300 group-hover:from-indigo-400 group-hover:to-fuchsia-400 group-hover:shadow-[0_0_15px_rgba(217,70,239,0.5)]" 
+                           ></motion.div>
+                        </div>
+                        {/* X-Axis Labels */}
+                        <span className="text-xs text-white/40 font-medium group-hover:text-white/80 transition-colors">
+                          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            {activeTab === 'queues' && (
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold">Service Queues</h2>
+                  <button onClick={() => setShowAddQueueModal(true)} className="px-4 py-2 bg-white text-black text-sm font-semibold rounded-xl flex items-center gap-2 hover:bg-white/90 transition-colors">
+                    <Plus className="w-4 h-4" /> Add Queue
+                  </button>
+                </div>
+                <div className="overflow-x-auto rounded-2xl border border-white/10">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-white/5 border-b border-white/10">
+                      <tr>
+                        <th className="px-6 py-4 font-medium text-white/80">ID</th>
+                        <th className="px-6 py-4 font-medium text-white/80">Name</th>
+                        <th className="px-6 py-4 font-medium text-white/80">Description</th>
+                        <th className="px-6 py-4 font-medium text-white/80">Status</th>
+                        <th className="px-6 py-4 font-medium text-white/80 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {queuesList.length === 0 ? (
+                        <tr><td colSpan={5} className="px-6 py-8 text-center text-white/50">No queues found.</td></tr>
+                      ) : (
+                        queuesList.map((q) => (
+                          <tr key={q.id} className="hover:bg-white/5 transition-colors">
+                            <td className="px-6 py-4 text-white/60">#{q.id}</td>
+                            <td className="px-6 py-4 font-bold text-indigo-300">{q.name}</td>
+                            <td className="px-6 py-4 text-white/60 max-w-[200px] truncate">{q.description || 'No description'}</td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium border ${q.is_active ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
+                                {q.is_active ? 'ACTIVE' : 'INACTIVE'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button onClick={() => { setEditQueueData(q); setShowEditQueueModal(true); }} className="p-2 text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors inline-flex mr-2">
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => handleDeleteQueue(q.id)} className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors inline-flex">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Existing Users Tab */}
+            {activeTab === 'users' && (
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold">User Management</h2>
+                  <button onClick={() => setShowAddModal(true)} className="px-4 py-2 bg-white text-black text-sm font-semibold rounded-xl flex items-center gap-2 hover:bg-white/90 transition-colors">
+                    <Plus className="w-4 h-4" /> Add User
+                  </button>
+                </div>
+                <div className="overflow-x-auto rounded-2xl border border-white/10">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-white/5 border-b border-white/10">
+                      <tr>
+                        <th className="px-6 py-4 font-medium text-white/80">ID</th>
+                        <th className="px-6 py-4 font-medium text-white/80">Name</th>
+                        <th className="px-6 py-4 font-medium text-white/80">Email</th>
+                        <th className="px-6 py-4 font-medium text-white/80 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {usersList.map((user) => (
+                        <tr key={user.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-4 text-white/60">#{user.id}</td>
+                          <td className="px-6 py-4 font-medium">{user.full_name}</td>
+                          <td className="px-6 py-4 text-white/80">{user.email}</td>
+                          <td className="px-6 py-4 text-right">
+                            <button onClick={() => handleDeleteUser(user.id)} className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors inline-flex">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Existing Tickets Tab */}
+            {activeTab === 'tickets' && (
+               // ... existing tickets table content ...
+               <div>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold">Tickets / QR Management</h2>
+                </div>
+                <div className="overflow-x-auto rounded-2xl border border-white/10">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-white/5 border-b border-white/10">
+                      <tr>
+                        <th className="px-6 py-4 font-medium text-white/80">Ticket #</th>
+                        <th className="px-6 py-4 font-medium text-white/80">User</th>
+                        <th className="px-6 py-4 font-medium text-white/80">Service</th>
+                        <th className="px-6 py-4 font-medium text-white/80">Status</th>
+                        <th className="px-6 py-4 font-medium text-white/80 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                        {ticketsList.map((ticket) => (
+                          <tr key={ticket.id} className="hover:bg-white/5 transition-colors">
+                            <td className="px-6 py-4 font-bold text-fuchsia-400">{ticket.ticket_number}</td>
+                            <td className="px-6 py-4">
+                              <div className="font-medium">{ticket.user_name}</div>
+                            </td>
+                            <td className="px-6 py-4 text-white/80">{ticket.queue_name}</td>
+                            <td className="px-6 py-4">
+                               <span className={`px-2 py-1 rounded-full text-xs font-medium border ${ticket.status === 'completed' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-white/10 border-white/20 text-white/80'}`}>{ticket.status.toUpperCase()}</span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button onClick={() => {
+                                const formattedDate = ticket.appointment_date ? new Date(ticket.appointment_date).toISOString().split('T')[0] : '';
+                                setEditTicketData({ ...ticket, appointment_date: formattedDate });
+                                setShowEditTicketModal(true);
+                              }} className="p-2 text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors inline-flex mr-2">
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => handleDeleteTicket(ticket.id)} className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors inline-flex">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* --- QUEUE MODALS --- */}
+      <AnimatePresence>
+        {/* ADD QUEUE MODAL */}
+        {showAddQueueModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAddQueueModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-panel w-full max-w-md rounded-3xl p-8 relative z-10 border-t border-l border-white/20 shadow-2xl">
+              <button onClick={() => setShowAddQueueModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+              <h2 className="text-2xl font-bold mb-6">Add New Queue</h2>
+              <form className="space-y-4" onSubmit={handleAddQueue}>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Queue Name</label><input type="text" value={newQueueName} onChange={e => setNewQueueName(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" placeholder="e.g. Consular Services" required /></div>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Description</label><textarea value={newQueueDesc} onChange={e => setNewQueueDesc(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" placeholder="Details about this queue..." rows={3} /></div>
+                <div className="flex items-center gap-3 mt-4">
+                  <input type="checkbox" id="queueActive" checked={newQueueActive} onChange={e => setNewQueueActive(e.target.checked)} className="w-5 h-5 accent-indigo-500" />
+                  <label htmlFor="queueActive" className="text-sm font-medium text-white/80 cursor-pointer">Queue is Active</label>
+                </div>
+                <button disabled={isLoading} className="w-full py-3 rounded-xl bg-white text-black font-semibold mt-6 hover:bg-white/90 transition-colors disabled:opacity-50">{isLoading ? 'Saving...' : 'Create Queue'}</button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* EDIT QUEUE MODAL */}
+        {showEditQueueModal && editQueueData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEditQueueModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-panel w-full max-w-md rounded-3xl p-8 relative z-10 border-t border-l border-white/20 shadow-2xl">
+              <button onClick={() => setShowEditQueueModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+              <h2 className="text-2xl font-bold mb-6">Edit Queue</h2>
+              <form className="space-y-4" onSubmit={handleUpdateQueue}>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Queue Name</label><input type="text" value={editQueueData.name} onChange={e => setEditQueueData({...editQueueData, name: e.target.value})} className="w-full glass-input rounded-xl px-4 py-3 text-sm" required /></div>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Description</label><textarea value={editQueueData.description || ''} onChange={e => setEditQueueData({...editQueueData, description: e.target.value})} className="w-full glass-input rounded-xl px-4 py-3 text-sm" rows={3} /></div>
+                <div className="flex items-center gap-3 mt-4">
+                  <input type="checkbox" id="editQueueActive" checked={!!editQueueData.is_active} onChange={e => setEditQueueData({...editQueueData, is_active: e.target.checked})} className="w-5 h-5 accent-indigo-500" />
+                  <label htmlFor="editQueueActive" className="text-sm font-medium text-white/80 cursor-pointer">Queue is Active</label>
+                </div>
+                <button disabled={isLoading} className="w-full py-3 rounded-xl bg-white text-black font-semibold mt-6 hover:bg-white/90 transition-colors disabled:opacity-50">{isLoading ? 'Saving...' : 'Save Changes'}</button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* --- EXISTING MODALS (USER / TICKET) KEEP THESE --- */}
+        {showAddModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAddModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-panel w-full max-w-md rounded-3xl p-8 relative z-10 border-t border-l border-white/20 shadow-2xl">
+              <button onClick={() => setShowAddModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+              <h2 className="text-2xl font-bold mb-6">Add New User</h2>
+              <form className="space-y-4" onSubmit={handleAddUser}>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Full Name</label><input type="text" value={newUserName} onChange={e => setNewUserName(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" required /></div>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Email</label><input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" required /></div>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Password</label><input type="password" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm" required /></div>
+                {addError && <p className="text-rose-400 text-sm text-center mt-2">{addError}</p>}
+                <button disabled={isLoading} className="w-full py-3 rounded-xl bg-white text-black font-semibold mt-6 hover:bg-white/90 transition-colors disabled:opacity-50">{isLoading ? 'Creating...' : 'Create User'}</button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+        
+        {showEditTicketModal && editTicketData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEditTicketModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-panel w-full max-w-md rounded-3xl p-8 relative z-10 border-t border-l border-white/20 shadow-2xl">
+              <button onClick={() => setShowEditTicketModal(false)} className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+              <h2 className="text-2xl font-bold mb-2">Modify Ticket</h2>
+              <form className="space-y-4" onSubmit={handleUpdateTicket}>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Status</label><select value={editTicketData.status} onChange={e => setEditTicketData({...editTicketData, status: e.target.value})} className="w-full glass-input rounded-xl px-4 py-3 text-sm appearance-none bg-gray-900"><option value="waiting">Waiting</option><option value="serving">Serving</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></div>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Appointment Date</label><input type="date" value={editTicketData.appointment_date} onChange={e => setEditTicketData({...editTicketData, appointment_date: e.target.value})} className="w-full glass-input rounded-xl px-4 py-3 text-sm [color-scheme:dark]" required /></div>
+                <div className="space-y-1"><label className="text-sm font-medium text-white/80 ml-1">Time Period</label><select value={editTicketData.time_period} onChange={e => setEditTicketData({...editTicketData, time_period: e.target.value})} className="w-full glass-input rounded-xl px-4 py-3 text-sm appearance-none bg-gray-900"><option value="Morning">Morning</option><option value="Evening">Evening</option></select></div>
+                <button disabled={isLoading} className="w-full py-3 rounded-xl bg-white text-black font-semibold mt-6 hover:bg-white/90 transition-colors disabled:opacity-50">{isLoading ? 'Saving...' : 'Save Changes'}</button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+    </div>
+  );
+};
+
+// ==========================================
+// USER DASHBOARD
+// ==========================================
+
 const Dashboard = ({ userId }: { userId?: number }) => {
   const [activeTab, setActiveTab] = useState('new');
   const [booked, setBooked] = useState(false);
@@ -272,6 +867,21 @@ const Dashboard = ({ userId }: { userId?: number }) => {
   const [time, setTime] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [tickets, setTickets] = useState<any[]>([]);
+  const [queues, setQueues] = useState<any[]>([]);
+  
+  // New state for the custom cancel modal
+  const [cancelTicketId, setCancelTicketId] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch('/api/queues')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setQueues(data.queues);
+        }
+      })
+      .catch(err => console.error('Failed to fetch queues', err));
+  }, []);
 
   useEffect(() => {
     if (userId && (activeTab === 'queue' || activeTab === 'history')) {
@@ -308,6 +918,33 @@ const Dashboard = ({ userId }: { userId?: number }) => {
     }
   };
 
+  const executeCancelTicket = async () => {
+    if (!userId || !cancelTicketId) return;
+    
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/tickets/${cancelTicketId}/cancel`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        const refreshRes = await fetch(`/api/tickets/${userId}`);
+        const refreshData = await refreshRes.json();
+        if (refreshData.success) {
+          setTickets(refreshData.tickets);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to cancel ticket', error);
+    } finally {
+      setCancelTicketId(null);
+      setIsLoading(false);
+    }
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -329,7 +966,7 @@ const Dashboard = ({ userId }: { userId?: number }) => {
         </div>
 
         {/* Content */}
-        <div className="flex-1">
+        <div className="flex-1 relative">
           {activeTab === 'new' && (
             <div className="glass-panel rounded-3xl p-8">
               <h2 className="text-2xl font-bold mb-6">Book New Appointment</h2>
@@ -340,7 +977,7 @@ const Dashboard = ({ userId }: { userId?: number }) => {
                   </div>
                   <h3 className="text-xl font-semibold mb-2">Appointment Confirmed!</h3>
                   <p className="text-white/60 mb-6">You have been added to the queue.</p>
-                  <button onClick={() => setActiveTab('queue')} className="glass-button px-6 py-2 rounded-xl">View My Queue</button>
+                  <button onClick={() => { setBooked(false); setActiveTab('queue'); }} className="glass-button px-6 py-2 rounded-xl">View My Queue</button>
                 </div>
               ) : (
                 <form className="space-y-6" onSubmit={handleBooking}>
@@ -348,9 +985,11 @@ const Dashboard = ({ userId }: { userId?: number }) => {
                     <label className="text-sm font-medium text-white/80">Select Service</label>
                     <select value={service} onChange={e => setService(e.target.value)} className="w-full glass-input rounded-xl px-4 py-3 text-sm appearance-none" required>
                       <option value="" className="bg-gray-900">Choose a service...</option>
-                      <option value="consultation" className="bg-gray-900">General Consultation</option>
-                      <option value="specialist" className="bg-gray-900">Specialist Visit</option>
-                      <option value="renewal" className="bg-gray-900">Document Renewal</option>
+                      {queues.map((queue) => (
+                        <option key={queue.id} value={queue.id} className="bg-gray-900">
+                          {queue.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -426,7 +1065,14 @@ const Dashboard = ({ userId }: { userId?: number }) => {
                           <QrCode className="w-16 h-16 text-black" />
                         </div>
                       </div>
-                      <p className="text-sm text-center text-white/60">Scan at the location to confirm arrival</p>
+                      <p className="text-sm text-center text-white/60 mb-4">Scan at the location to confirm arrival</p>
+                      
+                      <button 
+                        onClick={() => setCancelTicketId(ticket.id)}
+                        className="w-full py-2 px-4 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50 transition-all text-sm font-medium flex items-center justify-center gap-2"
+                      >
+                        <X className="w-4 h-4" /> Cancel Appointment
+                      </button>
                     </div>
                   </div>
                 ))
@@ -456,6 +1102,50 @@ const Dashboard = ({ userId }: { userId?: number }) => {
               </div>
             </div>
           )}
+
+          {/* Custom Cancel Confirmation Modal */}
+          <AnimatePresence>
+            {cancelTicketId !== null && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setCancelTicketId(null)}
+                  className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                />
+                <motion.div 
+                  initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                  className="glass-panel w-full max-w-sm rounded-3xl p-8 relative z-10 border-t border-l border-white/20 shadow-2xl text-center"
+                >
+                  <div className="w-16 h-16 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <X className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-2xl font-bold mb-2">Cancel Appointment?</h3>
+                  <p className="text-white/60 mb-8 text-sm leading-relaxed">
+                    Are you sure you want to cancel this appointment? This action cannot be undone.
+                  </p>
+                  <div className="flex gap-4">
+                    <button 
+                      onClick={() => setCancelTicketId(null)}
+                      className="flex-1 py-3 rounded-xl border border-white/10 hover:bg-white/10 text-white transition-colors font-medium text-sm"
+                    >
+                      Keep It
+                    </button>
+                    <button 
+                      onClick={executeCancelTicket}
+                      disabled={isLoading}
+                      className="flex-1 py-3 rounded-xl bg-red-500/80 hover:bg-red-500 text-white transition-colors font-medium text-sm disabled:opacity-50"
+                    >
+                      {isLoading ? 'Canceling...' : 'Yes, Cancel'}
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </motion.div>
@@ -463,27 +1153,37 @@ const Dashboard = ({ userId }: { userId?: number }) => {
 };
 
 export default function App() {
+  const [isAdminRoute] = useState(window.location.pathname.startsWith('/admin'));
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isSignupOpen, setIsSignupOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userEmail, setUserEmail] = useState<string | undefined>();
   const [userId, setUserId] = useState<number | undefined>();
+  const [userRole, setUserRole] = useState<string | undefined>();
   const [currentView, setCurrentView] = useState<'home' | 'dashboard'>('home');
 
-  const handleAuthSuccess = (user: { id: number, email: string }) => {
+  const handleAuthSuccess = (user: { id: number, email: string, role?: string }) => {
     setIsLoggedIn(true);
     setUserEmail(user.email);
     setUserId(user.id);
+    setUserRole(user.role);
     setIsLoginOpen(false);
     setIsSignupOpen(false);
-    setCurrentView('dashboard');
+    
+    // Only alter the standard view if they are not in the admin portal
+    if (!isAdminRoute) {
+      setCurrentView('dashboard');
+    }
   };
 
   const handleLogout = () => {
     setIsLoggedIn(false);
     setUserEmail(undefined);
     setUserId(undefined);
-    setCurrentView('home');
+    setUserRole(undefined);
+    if (!isAdminRoute) {
+      setCurrentView('home');
+    }
   };
 
   const handleGetStarted = () => {
@@ -494,6 +1194,15 @@ export default function App() {
     }
   };
 
+  // Render the hidden Admin App if the path is `/admin`
+  if (isAdminRoute) {
+    if (isLoggedIn && userRole === 'admin') {
+      return <AdminDashboard userEmail={userEmail} onLogout={handleLogout} />;
+    }
+    return <AdminLogin onSuccess={handleAuthSuccess} />;
+  }
+
+  // Otherwise, render the standard Customer App
   return (
     <div className="min-h-screen text-white font-sans selection:bg-white/30">
       <Background />

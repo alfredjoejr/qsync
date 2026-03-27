@@ -26,6 +26,17 @@ async function startServer() {
   app.use(express.json());
 
   // API routes FIRST
+  // Fetch available queues for the dropdown
+  app.get('/api/queues', async (req, res) => {
+    try {
+      const [rows] = await pool.query('SELECT id, name, description FROM queues WHERE is_active = TRUE');
+      res.json({ success: true, queues: rows });
+    } catch (error) {
+      console.error('Fetch queues error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
   app.get('/api/health', async (req, res) => {
     try {
       const [rows] = await pool.query('SELECT 1 AS solution');
@@ -75,6 +86,144 @@ async function startServer() {
     }
   });
 
+  // --- Admin Login Endpoint ---
+  app.post('/api/admin/login', async (req, res) => {
+    try {
+      const { email } = req.body;
+      // Query the new 'admins' table instead of 'users'
+      const [rows] = await pool.query('SELECT * FROM admins WHERE email = ?', [email]);
+      const admins = rows as any[];
+      
+      if (admins.length === 0) {
+        return res.status(404).json({ success: false, message: 'Admin not found or invalid credentials' });
+      }
+      
+      // Return the hash to the frontend for bcrypt comparison
+      res.json({ 
+        success: true, 
+        user: { id: admins[0].id, email: admins[0].email, role: 'admin' }, 
+        passwordHash: admins[0].password_hash 
+      });
+    } catch (error) {
+      console.error('Admin login error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+// ==========================================
+  // ADMIN USER MANAGEMENT ROUTES
+  // ==========================================
+
+  // Get all users
+  app.get('/api/admin/users', async (req, res) => {
+    try {
+      const [rows] = await pool.query('SELECT id, full_name, email, created_at FROM users ORDER BY created_at DESC');
+      res.json({ success: true, users: rows });
+    } catch (error) {
+      console.error('Fetch users error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+  // Create a new user (Admin override)
+  app.post('/api/admin/users', async (req, res) => {
+    try {
+      const { fullName, email, passwordHash } = req.body;
+      const [result] = await pool.query(
+        'INSERT INTO users (full_name, email, password_hash) VALUES (?, ?, ?)',
+        [fullName, email, passwordHash]
+      );
+      res.json({ success: true, userId: (result as any).insertId });
+    } catch (error: any) {
+      console.error('Create user error:', error);
+      if (error.code === 'ER_DUP_ENTRY') {
+        res.status(400).json({ success: false, message: 'Email already exists' });
+      } else {
+        res.status(500).json({ success: false, message: 'Database error' });
+      }
+    }
+  });
+
+  // Delete a user
+  app.delete('/api/admin/users/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // First, delete associated tickets to prevent foreign key constraint errors
+      await pool.query('DELETE FROM tickets WHERE user_id = ?', [id]);
+      
+      // Then delete the user
+      const [result] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
+      
+      if ((result as any).affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+      res.json({ success: true, message: 'User deleted successfully' });
+    } catch (error) {
+      console.error('Delete user error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+// ==========================================
+  // ADMIN TICKET / QR MANAGEMENT ROUTES
+  // ==========================================
+
+  // Get all tickets
+  app.get('/api/admin/tickets', async (req, res) => {
+    try {
+      const [rows] = await pool.query(`
+        SELECT t.*, u.full_name as user_name, u.email as user_email, q.name as queue_name 
+        FROM tickets t 
+        JOIN users u ON t.user_id = u.id 
+        JOIN queues q ON t.queue_id = q.id 
+        ORDER BY t.joined_at DESC
+      `);
+      res.json({ success: true, tickets: rows });
+    } catch (error) {
+      console.error('Fetch tickets error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+  // Update a ticket (Status, Date, Time)
+  app.put('/api/admin/tickets/:id', async (req, res) => {
+    try {
+      const ticketId = req.params.id;
+      const { status, appointment_date, time_period } = req.body;
+      
+      const [result] = await pool.query(
+        'UPDATE tickets SET status = ?, appointment_date = ?, time_period = ? WHERE id = ?',
+        [status, appointment_date, time_period, ticketId]
+      );
+      
+      if ((result as any).affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Ticket not found' });
+      }
+      res.json({ success: true, message: 'Ticket updated successfully' });
+    } catch (error) {
+      console.error('Update ticket error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+  // Delete a ticket
+  app.delete('/api/admin/tickets/:id', async (req, res) => {
+    try {
+      const ticketId = req.params.id;
+      const [result] = await pool.query('DELETE FROM tickets WHERE id = ?', [ticketId]);
+      
+      if ((result as any).affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Ticket not found' });
+      }
+      res.json({ success: true, message: 'Ticket deleted successfully' });
+    } catch (error) {
+      console.error('Delete ticket error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+
   // Ensure tickets table has the required columns for the frontend
   const ensureTicketColumns = async () => {
     try {
@@ -87,27 +236,26 @@ async function startServer() {
   ensureTicketColumns();
 
   app.post('/api/tickets', async (req, res) => {
-    try {
-      const { userId, service, date, time } = req.body;
-      
-      // Map frontend services to queue IDs (assuming 1, 2, 3 exist from schema.sql)
-      let queueId = 1;
-      if (service === 'specialist') queueId = 2;
-      if (service === 'renewal') queueId = 3;
+      try {
+        const { userId, service, date, time } = req.body;
+        
+        // 'service' is now coming from the frontend as the actual queue ID (1, 2, or 3)
+        // We parse it into an integer just to be safe before inserting it into the database.
+        const queueId = parseInt(service, 10);
 
-      const ticketNumber = `TKT-${Math.floor(1000 + Math.random() * 9000)}`;
+        const ticketNumber = `TKT-${Math.floor(1000 + Math.random() * 9000)}`;
 
-      const [result] = await pool.query(
-        'INSERT INTO tickets (queue_id, user_id, ticket_number, appointment_date, time_period) VALUES (?, ?, ?, ?, ?)',
-        [queueId, userId, ticketNumber, date, time]
-      );
+        const [result] = await pool.query(
+          'INSERT INTO tickets (queue_id, user_id, ticket_number, appointment_date, time_period) VALUES (?, ?, ?, ?, ?)',
+          [queueId, userId, ticketNumber, date, time]
+        );
 
-      res.json({ success: true, ticketId: (result as any).insertId, ticketNumber });
-    } catch (error) {
-      console.error('Booking error:', error);
-      res.status(500).json({ success: false, message: 'Database error' });
-    }
-  });
+        res.json({ success: true, ticketId: (result as any).insertId, ticketNumber });
+      } catch (error) {
+        console.error('Booking error:', error);
+        res.status(500).json({ success: false, message: 'Database error' });
+      }
+    });
 
   app.get('/api/tickets/:userId', async (req, res) => {
     try {
@@ -126,6 +274,99 @@ async function startServer() {
       res.status(500).json({ success: false, message: 'Database error' });
     }
   });
+
+  // Cancel a ticket
+  app.put('/api/tickets/:id/cancel', async (req, res) => {
+    try {
+      const ticketId = req.params.id;
+      const { userId } = req.body; // Verify user ID for basic security
+      
+      const [result] = await pool.query(
+        'UPDATE tickets SET status = "cancelled" WHERE id = ? AND user_id = ?',
+        [ticketId, userId]
+      );
+      
+      if ((result as any).affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Ticket not found or unauthorized' });
+      }
+
+      res.json({ success: true, message: 'Ticket cancelled' });
+    } catch (error) {
+      console.error('Cancel error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+  
+// ==========================================
+  // ADMIN QUEUES MANAGEMENT ROUTES
+  // ==========================================
+
+  // Get all queues (including inactive ones for admin view)
+  app.get('/api/admin/queues', async (req, res) => {
+    try {
+      const [rows] = await pool.query('SELECT * FROM queues ORDER BY id ASC');
+      res.json({ success: true, queues: rows });
+    } catch (error) {
+      console.error('Fetch admin queues error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+  // Create a new queue
+  app.post('/api/admin/queues', async (req, res) => {
+    try {
+      const { name, description, is_active } = req.body;
+      const [result] = await pool.query(
+        'INSERT INTO queues (name, description, is_active) VALUES (?, ?, ?)',
+        [name, description, is_active]
+      );
+      res.json({ success: true, queueId: (result as any).insertId });
+    } catch (error) {
+      console.error('Create queue error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+  // Update a queue
+  app.put('/api/admin/queues/:id', async (req, res) => {
+    try {
+      const queueId = req.params.id;
+      const { name, description, is_active } = req.body;
+      const [result] = await pool.query(
+        'UPDATE queues SET name = ?, description = ?, is_active = ? WHERE id = ?',
+        [name, description, is_active, queueId]
+      );
+      
+      if ((result as any).affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Queue not found' });
+      }
+      res.json({ success: true, message: 'Queue updated successfully' });
+    } catch (error) {
+      console.error('Update queue error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
+  // Delete a queue
+  app.delete('/api/admin/queues/:id', async (req, res) => {
+    try {
+      const queueId = req.params.id;
+      
+      // Delete associated tickets first to avoid foreign key constraints
+      await pool.query('DELETE FROM tickets WHERE queue_id = ?', [queueId]);
+      
+      const [result] = await pool.query('DELETE FROM queues WHERE id = ?', [queueId]);
+      
+      if ((result as any).affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Queue not found' });
+      }
+      res.json({ success: true, message: 'Queue deleted successfully' });
+    } catch (error) {
+      console.error('Delete queue error:', error);
+      res.status(500).json({ success: false, message: 'Database error' });
+    }
+  });
+
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
