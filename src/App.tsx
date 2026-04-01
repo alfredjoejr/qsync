@@ -29,7 +29,7 @@ const Navbar = ({ onAuth, isLoggedIn, userEmail, onLogout, currentView, onViewCh
           <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-fuchsia-500 flex items-center justify-center shadow-lg">
             <Clock className="w-5 h-5 text-white" />
           </div>
-          <span className="text-xl font-semibold tracking-tight">QFlow</span>
+          <span className="text-xl font-semibold tracking-tight">QSync</span>
         </div>
         
         <div className="hidden md:flex items-center gap-8 text-sm font-medium text-white/80">
@@ -945,6 +945,15 @@ const Dashboard = ({ userId }: { userId?: number }) => {
     }
   };
 
+  const toLocalDateInput = (value: Date) => { //local time formatter
+  const d = new Date(value);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().split('T')[0];
+  };
+
+  const today = toLocalDateInput(new Date());
+  const oneWeek = toLocalDateInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -997,8 +1006,8 @@ const Dashboard = ({ userId }: { userId?: number }) => {
                       <input 
                       type="date" 
                       value={date} 
-                      min={new Date().toISOString().split('T')[0]} /* <-- Add this line */
-                      onChange={e => setDate(e.target.value)} 
+                      min={today} //minimum date to select
+                      max={oneWeek} // maximum date to select
                       className="w-full glass-input rounded-xl px-4 py-3 text-sm [color-scheme:dark]" 
                       required />                  
                   </div>
