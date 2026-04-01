@@ -945,6 +945,15 @@ const Dashboard = ({ userId }: { userId?: number }) => {
     }
   };
 
+  const toLocalDateInput = (value: Date) => { //local time formatter
+  const d = new Date(value);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().split('T')[0];
+  };
+
+  const today = toLocalDateInput(new Date());
+  const oneWeek = toLocalDateInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -997,8 +1006,8 @@ const Dashboard = ({ userId }: { userId?: number }) => {
                       <input 
                       type="date" 
                       value={date} 
-                      min={new Date().toISOString().split('T')[0]} /* <-- Add this line */
-                      onChange={e => setDate(e.target.value)} 
+                      min={today} //minimum date to select
+                      max={oneWeek} // maximum date to select
                       className="w-full glass-input rounded-xl px-4 py-3 text-sm [color-scheme:dark]" 
                       required />                  
                   </div>
