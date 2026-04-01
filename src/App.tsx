@@ -29,7 +29,7 @@ const Navbar = ({ onAuth, isLoggedIn, userEmail, onLogout, currentView, onViewCh
           <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-fuchsia-500 flex items-center justify-center shadow-lg">
             <Clock className="w-5 h-5 text-white" />
           </div>
-          <span className="text-xl font-semibold tracking-tight">QFlow</span>
+          <span className="text-xl font-semibold tracking-tight">QSync</span>
         </div>
         
         <div className="hidden md:flex items-center gap-8 text-sm font-medium text-white/80">
